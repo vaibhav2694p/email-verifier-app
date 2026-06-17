@@ -22,22 +22,22 @@ OUTPUT_COLUMNS = [
     "Email Address",
     "First Name",
     "Last Name",
-    "Format",
-    "Domain Status",
-    "Professional Domain",
+    "Syntax Check",
+    "Domain Check",
+    "MX Record",
+    "SMTP Verification",
+    "Catch-All",
     "Disposable",
     "Role Account",
-    "MX Record",
-    "Mailbox Status",
-    "Catch-All",
+    "Duplicate",
     "Company Website",
     "Email Score",
     "SMTP Response",
     "LinkedIn URL",
-    "Website Status",
     "Verification Date",
     "Verification Source",
-    "Overall Status",
+    "Final Status",
+    "Send Decision",
 ]
 
 
@@ -52,6 +52,7 @@ def process_dataframe(
 
     total_rows = len(dataframe)
     output_rows: list[dict[str, object]] = []
+    seen_emails: set[str] = set()
 
     for processed_count, (_, row) in enumerate(dataframe.iterrows(), start=1):
         email_raw = clean_cell(row.get(mapping.email, ""))
@@ -62,7 +63,7 @@ def process_dataframe(
             continue
 
         try:
-            result = verify_single_email(email_raw)
+            result = verify_single_email(email_raw, seen_emails)
             output_rows.append(_result_to_row(result))
         except Exception:
             output_rows.append(_empty_row(email_raw))
@@ -82,22 +83,22 @@ def _result_to_row(result: object) -> dict[str, object]:
         "Email Address": r.email,
         "First Name": r.first_name or "Not Found",
         "Last Name": r.last_name or "Not Found",
-        "Format": "Valid" if r.format_check.valid else "Invalid",
-        "Domain Status": "Valid" if r.domain_check.valid else "Invalid",
-        "Professional Domain": "Valid" if r.professional_check.valid else "Invalid",
+        "Syntax Check": "Valid" if r.format_check.valid else "Invalid",
+        "Domain Check": "Valid" if r.domain_exists else "Invalid",
+        "MX Record": "Found" if r.mx_records_available else "Missing",
+        "SMTP Verification": r.smtp_status or "Unknown",
+        "Catch-All": "Yes" if r.catch_all is True else ("No" if r.catch_all is False else "N/A"),
         "Disposable": "Yes" if r.disposable_email else "No",
         "Role Account": "Yes" if r.role_account else "No",
-        "MX Record": "Valid" if r.mx_records_available else "Missing",
-        "Mailbox Status": "Exists" if r.mailbox_check.valid else ("Unable" if "Unable" in r.mailbox_check.status else "Not Exists"),
-        "Catch-All": "Yes" if r.catch_all is True else ("No" if r.catch_all is False else "N/A"),
+        "Duplicate": "Yes" if r.is_duplicate else "No",
         "Company Website": r.domain or "Not Found",
         "Email Score": r.score,
         "SMTP Response": r.smtp_response or "N/A",
         "LinkedIn URL": r.linkedin_url or "",
-        "Website Status": r.website_status,
         "Verification Date": f"{r.verification_date} {r.verification_time}",
         "Verification Source": r.verification_source,
-        "Overall Status": "VALID" if r.overall_valid else ("RISKY" if r.result == "Risky" else "INVALID"),
+        "Final Status": r.final_status,
+        "Send Decision": r.send_decision,
     }
 
 
@@ -106,20 +107,20 @@ def _empty_row(email: str) -> dict[str, object]:
         "Email Address": email,
         "First Name": "Not Found",
         "Last Name": "Not Found",
-        "Format": "Invalid",
-        "Domain Status": "Invalid",
-        "Professional Domain": "Invalid",
+        "Syntax Check": "Invalid",
+        "Domain Check": "Invalid",
+        "MX Record": "Missing",
+        "SMTP Verification": "Unknown",
+        "Catch-All": "N/A",
         "Disposable": "N/A",
         "Role Account": "N/A",
-        "MX Record": "Missing",
-        "Mailbox Status": "Not Exists",
-        "Catch-All": "N/A",
+        "Duplicate": "No",
         "Company Website": "Not Found",
         "Email Score": 0,
         "SMTP Response": "N/A",
         "LinkedIn URL": "",
-        "Website Status": "Unknown",
         "Verification Date": "",
         "Verification Source": "Real-Time",
-        "Overall Status": "INVALID",
+        "Final Status": "Invalid",
+        "Send Decision": "❌ Do not send",
     }

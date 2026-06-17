@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from email_verifier.enhanced_verifier import verify_single_email
+from email_verifier.enhanced_verifier import FINAL_STATUS_MAP, verify_single_email
 from email_verifier.export_utils import (
     dataframe_to_csv_bytes,
     dataframe_to_pdf_bytes,
@@ -24,6 +24,18 @@ from email_verifier.processor import VerificationOptions, process_dataframe
 
 st.set_page_config(page_title="Email Verifier", page_icon="@", layout="wide")
 
+STATUS_COL = "Final Status"
+
+STATUS_UI = {
+    "OK": ("🟢", "green", "✅ Send"),
+    "Catch-All": ("🟡", "orange", "⚠️ Send carefully"),
+    "Risky": ("🟡", "orange", "⚠️ Review first"),
+    "Invalid": ("🔴", "red", "❌ Do not send"),
+    "Disposable": ("🔴", "red", "❌ Do not send"),
+    "Unknown": ("🟠", "orange", "⚠️ Usually avoid"),
+    "Duplicate": ("⬜", "gray", "Remove"),
+}
+
 
 def render_single_verification() -> None:
     st.subheader("Real-Time Email Verification")
@@ -39,7 +51,7 @@ def render_single_verification() -> None:
     with col1:
         verify_clicked = st.button("Verify Email", type="primary")
     with col2:
-        st.caption("Performs format, domain, professional, and mailbox checks in real time.")
+        st.caption("Syntax, domain, MX, disposable, role, catch-all, and SMTP checks.")
 
     if not verify_clicked:
         return
@@ -51,35 +63,47 @@ def render_single_verification() -> None:
     st.markdown(f"### Email Verification Results")
     st.markdown(f"📧 **Email:** `{result.email}`")
 
-    overall_icon = "✅" if result.overall_valid else "❌"
-    overall_color = "green" if result.overall_valid else "red"
+    icon, color, decision = STATUS_UI.get(
+        result.final_status, ("❓", "gray", "Unknown")
+    )
     st.markdown(
-        f"### {overall_icon} Overall Status: "
-        f"<span style='color:{overall_color}'>"
-        f"{'VALID' if result.overall_valid else 'INVALID'}</span>",
+        f"### {icon} Final Status: "
+        f"<span style='color:{color}'>{result.final_status}</span>  \n"
+        f"**{decision}**",
         unsafe_allow_html=True,
     )
 
     st.markdown("━━━━━━━━━━━━━━━━━━━━")
 
-    checks = [
-        ("Format", result.format_check),
-        ("Professional", result.professional_check),
-        ("Domain Status", result.domain_check),
-        ("Mailbox", result.mailbox_check),
+    checks_table = [
+        ("Syntax Check", result.format_check.status, "Valid" == result.format_check.status),
+        ("Domain Check", "Valid" if result.domain_exists else "Invalid", result.domain_exists),
+        ("MX Record", "Found" if result.mx_records_available else "Missing", result.mx_records_available),
+        ("SMTP Verification", result.smtp_status or "Unknown", result.smtp_status == "Exists"),
+        ("Catch-All", "Yes" if result.catch_all is True else "No", result.catch_all is not True),
+        ("Disposable", "Yes" if result.disposable_email else "No", not result.disposable_email),
+        ("Role Account", "Yes" if result.role_account else "No", not result.role_account),
+        ("Duplicate", "Yes" if result.is_duplicate else "No", not result.is_duplicate),
     ]
 
-    for label, check in checks:
-        icon = "✅" if check.valid else ("⚠️" if "Unable" in check.status else "❌")
-        status_color = "green" if check.valid else ("orange" if "Unable" in check.status else "red")
+    for label, status_text, is_good in checks_table:
+        if status_text in ("Valid", "Found", "Exists", "No"):
+            icon_c = "✅"
+            c = "green"
+        elif status_text in ("Invalid", "Missing", "Not Found", "Yes", "Blocked"):
+            icon_c = "❌"
+            c = "red"
+        else:
+            icon_c = "⚠️"
+            c = "orange"
         st.markdown(
-            f"{icon} **{label}**  \n"
-            f"Status: <span style='color:{status_color}'>{check.status}</span>  \n"
-            f"{check.details}",
+            f"{icon_c} **{label}:** "
+            f"<span style='color:{c}'>{status_text}</span>",
             unsafe_allow_html=True,
         )
-        st.markdown("")
 
+    st.markdown("")
+    st.markdown(f"**Send Decision:** {result.send_decision}")
     st.markdown("━━━━━━━━━━━━━━━━━━━━")
 
     col_a, col_b, col_c = st.columns(3)
@@ -88,21 +112,15 @@ def render_single_verification() -> None:
     with col_b:
         st.markdown(f"**Verification Time:** {result.verification_time}")
     with col_c:
-        r = result.result
-        if r == "Deliverable":
-            st.markdown(f"**Result:** 🟢 {r}")
-        elif r == "Risky":
-            st.markdown(f"**Result:** 🟡 {r}")
-        else:
-            st.markdown(f"**Result:** 🔴 {r}")
+        st.markdown(f"**Score:** {result.score}/100")
 
     st.markdown("")
-    if result.overall_valid:
+    if result.final_status == "OK":
         st.success("🟢 Safe to Send Emails")
-    elif result.result == "Risky":
-        st.warning("🟡 Risky - Proceed with Caution")
+    elif result.final_status in ("Catch-All", "Risky", "Unknown"):
+        st.warning("🟡 Proceed with Caution")
     else:
-        st.error("🔴 Undeliverable - Do not send")
+        st.error("🔴 Do not send")
 
     st.markdown("---")
     st.markdown("### Advanced Details")
@@ -112,20 +130,15 @@ def render_single_verification() -> None:
         st.markdown(f"**First Name:** {result.first_name or 'N/A'} {'✓' if result.first_name else ''}")
         st.markdown(f"**Last Name:** {result.last_name or 'N/A'} {'✓' if result.last_name else ''}")
         st.markdown(f"**Full Name:** {result.full_name or 'N/A'}")
-        role_str = (
-            "⚠️ Yes - This appears to be a generic/role account"
-            if result.role_account
-            else "✅ No - This is not a role account"
-        )
+        role_str = "⚠️ Yes - Role account" if result.role_account else "✅ No - Not a role account"
         st.markdown(f"**Role Account:** {role_str}")
 
     with tabs[1]:
         st.markdown(f"**Domain:** `{result.domain}`")
-        mx_str = "✅ Available ✓" if result.mx_records_available else "❌ Not Available"
-        st.markdown(f"**MX Records:** {mx_str}")
+        mx_str = "✅ Found" if result.mx_records_available else "❌ Missing"
+        st.markdown(f"**MX Record:** {mx_str}")
         catch_all_str = (
-            "⚠️ Yes - Domain accepts all emails"
-            if result.catch_all is True
+            "⚠️ Yes" if result.catch_all is True
             else ("✅ No" if result.catch_all is False else "N/A")
         )
         st.markdown(f"**Catch-All:** {catch_all_str}")
@@ -133,7 +146,7 @@ def render_single_verification() -> None:
     with tabs[2]:
         provider_str = "🏢 Business" if result.provider_type == "Business" else "📧 Free Email Provider"
         st.markdown(f"**Provider Type:** {provider_str}")
-        disposable_str = "❌ Yes - Disposable/temporary" if result.disposable_email else "✅ No ✓"
+        disposable_str = "❌ Yes" if result.disposable_email else "✅ No"
         st.markdown(f"**Disposable Email:** {disposable_str}")
 
     with tabs[3]:
@@ -143,9 +156,10 @@ def render_single_verification() -> None:
             unsafe_allow_html=True,
         )
         st.markdown(f"- Format: {25 if result.format_check.valid else 0}/25")
-        st.markdown(f"- Domain: {25 if result.domain_check.valid else 0}/25")
-        st.markdown(f"- Professional: {20 if result.professional_check.valid else 0}/20")
-        st.markdown(f"- Mailbox: {30 if result.mailbox_check.valid else 0}/30")
+        st.markdown(f"- Domain: {20 if result.domain_exists else 0}/20")
+        st.markdown(f"- MX Record: {20 if result.mx_records_available else 0}/20")
+        st.markdown(f"- Professional: {10 if not result.disposable_email else 0}/10")
+        st.markdown(f"- Mailbox: {25 if result.smtp_status == 'Exists' else (10 if result.smtp_status in ('Blocked', 'Unknown') else 0)}/25")
 
 
 def render_bulk_verification() -> None:
@@ -166,9 +180,7 @@ def render_bulk_verification() -> None:
             step=0.5,
         )
 
-    uploaded_file = st.file_uploader(
-        "Choose a file", type=["csv", "xlsx", "txt"]
-    )
+    uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "txt"])
     if uploaded_file is None:
         return
 
@@ -190,20 +202,20 @@ def render_bulk_verification() -> None:
     else:
         name_guess = infer_column(columns, "name")
         company_guess = infer_column(columns, "company")
-        mapping_cols = st.columns(3)
-        with mapping_cols[0]:
+        mc1, mc2, mc3 = st.columns(3)
+        with mc1:
             email_column = st.selectbox(
                 "Email column",
                 options=[""] + columns,
                 index=get_default_column_index(columns, email_guess),
             )
-        with mapping_cols[1]:
+        with mc2:
             name_column = st.selectbox(
                 "Name column",
                 options=[""] + columns,
                 index=get_default_column_index(columns, name_guess),
             )
-        with mapping_cols[2]:
+        with mc3:
             company_column = st.selectbox(
                 "Company column",
                 options=[""] + columns,
@@ -233,7 +245,6 @@ def render_bulk_verification() -> None:
 
     progress_bar = st.progress(0)
     status_text = st.empty()
-    results_container = st.container()
 
     def update_progress(done: int, total: int) -> None:
         progress_bar.progress(done / total if total else 1.0)
@@ -257,60 +268,62 @@ def render_bulk_verification() -> None:
     st.success("Verification complete.")
 
     total = len(result_df)
-    valid_count = int((result_df["Overall Status"] == "VALID").sum())
-    risky_count = int((result_df["Overall Status"] == "RISKY").sum())
-    invalid_count = int((result_df["Overall Status"] == "INVALID").sum())
+    ok_count = int((result_df[STATUS_COL] == "OK").sum())
+    catchall_count = int((result_df[STATUS_COL] == "Catch-All").sum())
+    risky_count = int((result_df[STATUS_COL] == "Risky").sum())
+    invalid_count = int((result_df[STATUS_COL] == "Invalid").sum())
+    disposable_count = int((result_df[STATUS_COL] == "Disposable").sum())
+    unknown_count = int((result_df[STATUS_COL] == "Unknown").sum())
+    duplicate_count = int((result_df[STATUS_COL] == "Duplicate").sum())
 
     st.markdown("---")
     st.markdown("### Bulk Upload Summary")
 
-    summary_cols = st.columns(4)
-    with summary_cols[0]:
-        st.metric("Total Emails", f"{total:,}")
-    with summary_cols[1]:
-        st.metric("Valid Emails", f"{valid_count:,}", delta_color="off")
-        st.markdown(
-            f"<p style='color:green; font-size:1.2rem; font-weight:bold;'"
-            f">🟢 {valid_count:,}</p>",
-            unsafe_allow_html=True,
-        )
-    with summary_cols[2]:
-        st.metric("Risky Emails", f"{risky_count:,}", delta_color="off")
-        st.markdown(
-            f"<p style='color:orange; font-size:1.2rem; font-weight:bold;'"
-            f">🟡 {risky_count:,}</p>",
-            unsafe_allow_html=True,
-        )
-    with summary_cols[3]:
-        st.metric("Invalid Emails", f"{invalid_count:,}", delta_color="off")
-        st.markdown(
-            f"<p style='color:red; font-size:1.2rem; font-weight:bold;'"
-            f">🔴 {invalid_count:,}</p>",
-            unsafe_allow_html=True,
-        )
+    sm1, sm2, sm3, sm4, sm5 = st.columns(5)
+    with sm1:
+        st.metric("Total", f"{total:,}")
+    with sm2:
+        st.markdown("🟢 **OK**")
+        st.markdown(f"<p style='color:green;font-size:1.3rem;font-weight:bold'>{ok_count:,}</p>", unsafe_allow_html=True)
+    with sm3:
+        st.markdown("🟡 **Risky/Catch-All**")
+        st.markdown(f"<p style='color:orange;font-size:1.3rem;font-weight:bold'>{catchall_count + risky_count:,}</p>", unsafe_allow_html=True)
+    with sm4:
+        st.markdown("🔴 **Invalid/Disposable**")
+        st.markdown(f"<p style='color:red;font-size:1.3rem;font-weight:bold'>{invalid_count + disposable_count:,}</p>", unsafe_allow_html=True)
+    with sm5:
+        st.markdown("🟠 **Unknown**")
+        st.markdown(f"<p style='color:orange;font-size:1.3rem;font-weight:bold'>{unknown_count:,}</p>", unsafe_allow_html=True)
+
+    if duplicate_count > 0:
+        st.caption(f"⬜ Duplicates removed: {duplicate_count:,}")
 
     st.markdown("---")
     st.markdown("### Detailed Results")
 
-    def highlight_status(val: object) -> str:
+    def highlight(val: object) -> str:
         s = str(val)
-        if s == "VALID":
-            return "background-color: #d4edda; color: #155724"
-        if s == "RISKY":
-            return "background-color: #fff3cd; color: #856404"
-        if s == "INVALID":
-            return "background-color: #f8d7da; color: #721c24"
-        if s in ("Valid", "Yes"):
-            return "background-color: #d4edda; color: #155724"
-        if s in ("Invalid", "N/A"):
-            return "background-color: #f8d7da; color: #721c24"
+        if s == "OK":
+            return "background-color:#d4edda;color:#155724"
+        if s in ("Catch-All", "Risky"):
+            return "background-color:#fff3cd;color:#856404"
+        if s in ("Invalid", "Disposable"):
+            return "background-color:#f8d7da;color:#721c24"
+        if s == "Unknown":
+            return "background-color:#ffd8a8;color:#8a4a00"
+        if s == "Duplicate":
+            return "background-color:#e2e3e5;color:#383d41"
+        if s in ("Valid", "Found", "Exists", "No"):
+            return "background-color:#d4edda;color:#155724"
+        if s in ("Invalid", "Missing", "Not Found", "Yes", "Blocked"):
+            return "background-color:#f8d7da;color:#721c24"
         return ""
 
-    styled_df = result_df.style.applymap(highlight_status, subset=[
-        "Overall Status", "Format", "Professional Domain",
-        "Domain Status", "Mailbox Status", "Disposable",
-        "Role Account", "MX Record", "First Name", "Last Name",
-    ])
+    hl_cols = [STATUS_COL, "Syntax Check", "Domain Check", "MX Record",
+               "SMTP Verification", "Disposable", "Role Account", "Duplicate",
+               "First Name", "Last Name"]
+    valid_cols = [c for c in hl_cols if c in result_df.columns]
+    styled_df = result_df.style.applymap(highlight, subset=valid_cols)
 
     st.dataframe(styled_df, width="stretch", hide_index=True)
 
@@ -321,51 +334,47 @@ def render_bulk_verification() -> None:
     selected_email = st.selectbox("Select an email to view details", options=email_list)
     if selected_email:
         row = result_df[result_df["Email Address"] == selected_email].iloc[0]
-        overall = str(row.get("Overall Status", ""))
+        fs = str(row.get(STATUS_COL, ""))
 
-        if overall == "VALID":
-            st.success(f"🟢 VALID — {selected_email}")
-        elif overall == "RISKY":
-            st.warning(f"🟡 RISKY — {selected_email}")
-        else:
-            st.error(f"🔴 INVALID — {selected_email}")
+        icon_c, color_c, decision_c = STATUS_UI.get(fs, ("❓", "gray", ""))
+        st.markdown(f"### {icon_c} {fs} — {selected_email}")
 
-        detail_items = [
-            ("First Name", "First Name", "green" if str(row.get("First Name")) != "Not Found" else "red"),
-            ("Last Name", "Last Name", "green" if str(row.get("Last Name")) != "Not Found" else "red"),
-            ("Format", "Format", "green" if str(row.get("Format")) == "Valid" else "red"),
-            ("Domain Status", "Domain Status", "green" if str(row.get("Domain Status")) == "Valid" else "red"),
-            ("Professional Domain", "Professional Domain", "green" if str(row.get("Professional Domain")) == "Valid" else "red"),
-            ("Disposable", "Disposable", "red" if str(row.get("Disposable")) == "Yes" else "green"),
-            ("Role Account", "Role Account", "red" if str(row.get("Role Account")) == "Yes" else "green"),
-            ("MX Record", "MX Record", "green" if str(row.get("MX Record")) == "Valid" else "red"),
-            ("Mailbox Status", "Mailbox Status", "green" if str(row.get("Mailbox Status")) == "Exists" else "red"),
-            ("Catch-All", "Catch-All", "orange" if str(row.get("Catch-All")) == "Yes" else "green"),
-            ("Company Website", "Company Website", "green" if str(row.get("Company Website")) != "Not Found" else "orange"),
+        checks = [
+            ("Syntax Check", "Syntax Check", "Valid"),
+            ("Domain Check", "Domain Check", "Valid"),
+            ("MX Record", "MX Record", "Found"),
+            ("SMTP Verification", "SMTP Verification", "Exists"),
+            ("Catch-All", "Catch-All", "No"),
+            ("Disposable", "Disposable", "No"),
+            ("Role Account", "Role Account", "No"),
+            ("Duplicate", "Duplicate", "No"),
         ]
-
-        for label, key, color in detail_items:
+        for label, key, good_val in checks:
             val = str(row.get(key, ""))
-            icon_map = {"green": "✅", "red": "❌", "orange": "⚠️"}
-            st.markdown(
-                f"{icon_map[color]} **{label}:** "
-                f"<span style='color:{color}'>{val}</span>",
-                unsafe_allow_html=True,
-            )
+            is_good = val == good_val
+            icon_c2 = "✅" if is_good else "❌"
+            c2 = "green" if is_good else "red"
+            st.markdown(f"{icon_c2} **{label}:** <span style='color:{c2}'>{val}</span>", unsafe_allow_html=True)
 
         st.markdown("")
-        score_val = int(row.get("Email Score", 0))
-        date_val = str(row.get("Verification Date", ""))
-        smtp_val = str(row.get("SMTP Response", ""))
+        st.markdown(f"**Send Decision:** {decision_c}")
 
-        col_sc, col_sm, col_dt = st.columns(3)
-        with col_sc:
-            score_color = "green" if score_val >= 70 else ("orange" if score_val >= 40 else "red")
-            st.markdown(f"**Score:** <span style='color:{score_color}'>{score_val}/100</span>", unsafe_allow_html=True)
-        with col_sm:
-            st.markdown(f"**SMTP Response:** {smtp_val[:50]}")
-        with col_dt:
-            st.markdown(f"**Date:** {date_val}")
+        fn = str(row.get("First Name", ""))
+        ln = str(row.get("Last Name", ""))
+        score_v = int(row.get("Email Score", 0))
+        date_v = str(row.get("Verification Date", ""))
+        smtp_v = str(row.get("SMTP Response", ""))
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            sc = "green" if score_v >= 70 else ("orange" if score_v >= 40 else "red")
+            st.markdown(f"**Score:** <span style='color:{sc}'>{score_v}/100</span>", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"**Name:** {fn} {ln}".strip())
+        with c3:
+            st.markdown(f"**SMTP:** {smtp_v[:40]}")
+
+        st.caption(f"Verified: {date_v}")
 
     st.markdown("---")
     st.markdown("### Export Options")
@@ -375,79 +384,63 @@ def render_bulk_verification() -> None:
     exp_tabs = st.tabs(["📥 Full Report", "📥 Filtered Exports"])
 
     with exp_tabs[0]:
-        ec1, ec2, ec3 = st.columns(3)
-        with ec1:
-            csv_data = dataframe_to_csv_bytes(result_df)
+        e1, e2, e3 = st.columns(3)
+        with e1:
             st.download_button(
-                "📄 Download CSV",
-                data=csv_data,
-                file_name=f"{base}.csv",
-                mime="text/csv",
-                use_container_width=True,
+                "📄 Download CSV", data=dataframe_to_csv_bytes(result_df),
+                file_name=f"{base}.csv", mime="text/csv", use_container_width=True,
             )
-        with ec2:
-            xlsx_data = dataframe_to_xlsx_bytes(result_df)
+        with e2:
             st.download_button(
-                "📗 Download Full Report (XLSX)",
-                data=xlsx_data,
+                "📗 Download Full Report (XLSX)", data=dataframe_to_xlsx_bytes(result_df),
                 file_name=f"{base}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
-        with ec3:
+        with e3:
             try:
-                pdf_data = dataframe_to_pdf_bytes(result_df)
                 st.download_button(
-                    "📕 Download PDF Report",
-                    data=pdf_data,
-                    file_name=f"{base}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
+                    "📕 Download PDF Report", data=dataframe_to_pdf_bytes(result_df),
+                    file_name=f"{base}.pdf", mime="application/pdf", use_container_width=True,
                 )
             except Exception as exc:
                 st.error(f"PDF failed: {exc}")
 
     with exp_tabs[1]:
-        fe1, fe2, fe3 = st.columns(3)
-        has_valid = valid_count > 0
-        has_risky = risky_count > 0
-        has_invalid = invalid_count > 0
-        with fe1:
-            if has_valid:
-                vx = dataframe_valid_xlsx_bytes(result_df)
+        f1, f2, f3 = st.columns(3)
+        has_ok = ok_count > 0
+        has_risky = (catchall_count + risky_count) > 0
+        has_bad = (invalid_count + disposable_count) > 0
+        with f1:
+            if has_ok:
                 st.download_button(
-                    "🟢 Valid Emails (XLSX)",
-                    data=vx,
-                    file_name=f"Valid_Emails_{timestamp}.xlsx",
+                    "🟢 OK Emails (XLSX)", data=dataframe_valid_xlsx_bytes(result_df),
+                    file_name=f"OK_Emails_{timestamp}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
             else:
-                st.button("🟢 Valid Emails", disabled=True, use_container_width=True)
-        with fe2:
+                st.button("🟢 OK Emails", disabled=True, use_container_width=True)
+        with f2:
             if has_risky:
-                rx = dataframe_risky_xlsx_bytes(result_df)
                 st.download_button(
-                    "🟡 Risky Emails (XLSX)",
-                    data=rx,
+                    "🟡 Risky/Catch-All (XLSX)", data=dataframe_risky_xlsx_bytes(result_df),
                     file_name=f"Risky_Emails_{timestamp}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
             else:
-                st.button("🟡 Risky Emails", disabled=True, use_container_width=True)
-        with fe3:
-            if has_invalid:
-                ix = dataframe_invalid_xlsx_bytes(result_df)
+                st.button("🟡 Risky/Catch-All", disabled=True, use_container_width=True)
+        with f3:
+            if has_bad:
                 st.download_button(
-                    "🔴 Invalid Emails (XLSX)",
-                    data=ix,
+                    "🔴 Invalid/Disposable (XLSX)", data=dataframe_invalid_xlsx_bytes(result_df),
                     file_name=f"Invalid_Emails_{timestamp}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
             else:
-                st.button("🔴 Invalid Emails", disabled=True, use_container_width=True)
+                st.button("🔴 Invalid/Disposable", disabled=True, use_container_width=True)
 
 
 def render_app() -> None:
