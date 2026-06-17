@@ -55,16 +55,21 @@ def read_uploaded_table(uploaded_file: object) -> pd.DataFrame:
             dataframe = pd.read_csv(uploaded_file, dtype=str, keep_default_na=False)
         elif extension == ".xlsx":
             dataframe = pd.read_excel(uploaded_file, dtype=str, keep_default_na=False)
+        elif extension == ".txt":
+            content = uploaded_file.read().decode("utf-8", errors="replace")
+            lines = [line.strip() for line in content.splitlines() if line.strip()]
+            dataframe = pd.DataFrame({"Email": lines})
         else:
-            raise ValueError("Upload a CSV or XLSX file.")
+            raise ValueError("Upload a CSV, XLSX, or TXT file.")
     except ValueError:
         raise
     except Exception as exc:
         raise ValueError(f"Could not read {filename or 'uploaded file'}: {exc}") from exc
 
-    dataframe.columns = deduplicate_columns(
-        [str(column).strip() for column in dataframe.columns]
-    )
+    if extension != ".txt":
+        dataframe.columns = deduplicate_columns(
+            [str(column).strip() for column in dataframe.columns]
+        )
     dataframe = dataframe.fillna("")
 
     if dataframe.empty:

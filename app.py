@@ -2,9 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pandas as pd
 import streamlit as st
 
 from email_verifier.enhanced_verifier import verify_single_email
+from email_verifier.export_utils import (
+    dataframe_to_csv_bytes,
+    dataframe_to_pdf_bytes,
+    dataframe_to_xlsx_bytes,
+)
 from email_verifier.io import (
     ColumnMapping,
     get_default_column_index,
@@ -30,9 +36,7 @@ def render_single_verification() -> None:
     with col1:
         verify_clicked = st.button("Verify Email", type="primary")
     with col2:
-        st.caption(
-            "Performs format, domain, professional, and mailbox checks in real time."
-        )
+        st.caption("Performs format, domain, professional, and mailbox checks in real time.")
 
     if not verify_clicked:
         return
@@ -48,7 +52,8 @@ def render_single_verification() -> None:
     overall_color = "green" if result.overall_valid else "red"
     st.markdown(
         f"### {overall_icon} Overall Status: "
-        f"<span style='color:{overall_color}'>{'VALID' if result.overall_valid else 'INVALID'}</span>",
+        f"<span style='color:{overall_color}'>"
+        f"{'VALID' if result.overall_valid else 'INVALID'}</span>",
         unsafe_allow_html=True,
     )
 
@@ -80,16 +85,15 @@ def render_single_verification() -> None:
     with col_b:
         st.markdown(f"**Verification Time:** {result.verification_time}")
     with col_c:
-        result_label = result.result
-        if result_label == "Deliverable":
-            st.markdown(f"**Result:** 🟢 {result_label}")
-        elif result_label == "Risky":
-            st.markdown(f"**Result:** 🟡 {result_label}")
+        r = result.result
+        if r == "Deliverable":
+            st.markdown(f"**Result:** 🟢 {r}")
+        elif r == "Risky":
+            st.markdown(f"**Result:** 🟡 {r}")
         else:
-            st.markdown(f"**Result:** 🔴 {result_label}")
+            st.markdown(f"**Result:** 🔴 {r}")
 
     st.markdown("")
-
     if result.overall_valid:
         st.success("🟢 Safe to Send Emails")
     elif result.result == "Risky":
@@ -99,14 +103,17 @@ def render_single_verification() -> None:
 
     st.markdown("---")
     st.markdown("### Advanced Details")
-
     tabs = st.tabs(["Name Detection", "Domain Info", "Provider Info", "Score Breakdown"])
 
     with tabs[0]:
         st.markdown(f"**First Name:** {result.first_name or 'N/A'} {'✓' if result.first_name else ''}")
         st.markdown(f"**Last Name:** {result.last_name or 'N/A'} {'✓' if result.last_name else ''}")
         st.markdown(f"**Full Name:** {result.full_name or 'N/A'}")
-        role_str = "⚠️ Yes - This appears to be a generic/role account" if result.role_account else "✅ No - This is not a role account"
+        role_str = (
+            "⚠️ Yes - This appears to be a generic/role account"
+            if result.role_account
+            else "✅ No - This is not a role account"
+        )
         st.markdown(f"**Role Account:** {role_str}")
 
     with tabs[1]:
@@ -132,21 +139,15 @@ def render_single_verification() -> None:
             f"### <span style='color:{score_color}'>{result.score}/100</span>",
             unsafe_allow_html=True,
         )
-        format_pts = 25 if result.format_check.valid else 0
-        domain_pts = 25 if result.domain_check.valid else 0
-        prof_pts = 20 if result.professional_check.valid else 0
-        mailbox_pts = 30 if result.mailbox_check.valid else 0
-        st.markdown(f"- Format: {format_pts}/25")
-        st.markdown(f"- Domain: {domain_pts}/25")
-        st.markdown(f"- Professional: {prof_pts}/20")
-        st.markdown(f"- Mailbox: {mailbox_pts}/30")
-        total_check = format_pts + domain_pts + prof_pts + mailbox_pts
-        if total_check != result.score:
-            st.markdown(f"- **Total: {result.score}/100**")
+        st.markdown(f"- Format: {25 if result.format_check.valid else 0}/25")
+        st.markdown(f"- Domain: {25 if result.domain_check.valid else 0}/25")
+        st.markdown(f"- Professional: {20 if result.professional_check.valid else 0}/20")
+        st.markdown(f"- Mailbox: {30 if result.mailbox_check.valid else 0}/30")
 
 
 def render_bulk_verification() -> None:
-    st.subheader("Bulk CSV / XLSX Verification")
+    st.subheader("Bulk Email Verification Upload")
+    st.markdown("Upload **CSV**, **XLSX**, or **TXT** files containing email addresses.")
 
     with st.sidebar:
         linkedin_scope_label = st.radio(
@@ -162,7 +163,9 @@ def render_bulk_verification() -> None:
             step=0.5,
         )
 
-    uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
+    uploaded_file = st.file_uploader(
+        "Choose a file", type=["csv", "xlsx", "txt"]
+    )
     if uploaded_file is None:
         return
 
@@ -174,36 +177,44 @@ def render_bulk_verification() -> None:
 
     columns = list(dataframe.columns)
     email_guess = infer_column(columns, "email")
-    name_guess = infer_column(columns, "name")
-    company_guess = infer_column(columns, "company")
+    use_simple_mode = columns == ["Email"]
 
-    mapping_cols = st.columns(3)
-    with mapping_cols[0]:
-        email_column = st.selectbox(
-            "Email column",
-            options=[""] + columns,
-            index=get_default_column_index(columns, email_guess),
-        )
-    with mapping_cols[1]:
-        name_column = st.selectbox(
-            "Name column",
-            options=[""] + columns,
-            index=get_default_column_index(columns, name_guess),
-        )
-    with mapping_cols[2]:
-        company_column = st.selectbox(
-            "Company column",
-            options=[""] + columns,
-            index=get_default_column_index(columns, company_guess),
-        )
+    if use_simple_mode:
+        email_column = "Email"
+        name_column = ""
+        company_column = ""
+        st.info("TXT file detected — treating each line as an email address.")
+    else:
+        name_guess = infer_column(columns, "name")
+        company_guess = infer_column(columns, "company")
+        mapping_cols = st.columns(3)
+        with mapping_cols[0]:
+            email_column = st.selectbox(
+                "Email column",
+                options=[""] + columns,
+                index=get_default_column_index(columns, email_guess),
+            )
+        with mapping_cols[1]:
+            name_column = st.selectbox(
+                "Name column",
+                options=[""] + columns,
+                index=get_default_column_index(columns, name_guess),
+            )
+        with mapping_cols[2]:
+            company_column = st.selectbox(
+                "Company column",
+                options=[""] + columns,
+                index=get_default_column_index(columns, company_guess),
+            )
 
     st.dataframe(dataframe.head(25), width="stretch", hide_index=True)
+    st.caption(f"Showing first 25 of {len(dataframe)} rows")
 
     if not email_column:
         st.error("Select an email column before verification.")
         return
 
-    run_clicked = st.button("Verify emails", type="primary")
+    run_clicked = st.button("Verify Emails", type="primary")
     if not run_clicked:
         return
 
@@ -219,13 +230,14 @@ def render_bulk_verification() -> None:
 
     progress_bar = st.progress(0)
     status_text = st.empty()
+    results_container = st.container()
 
     def update_progress(done: int, total: int) -> None:
         progress_bar.progress(done / total if total else 1.0)
         status_text.write(f"Verified {done} of {total} rows")
 
     try:
-        result = process_dataframe(
+        result_df = process_dataframe(
             dataframe,
             mapping=mapping,
             options=options,
@@ -238,27 +250,157 @@ def render_bulk_verification() -> None:
         st.error(f"Verification failed: {exc}")
         return
 
-    status_text.write(f"Verified {len(result)} rows")
+    status_text.write(f"Verified {len(result_df)} rows")
     st.success("Verification complete.")
 
-    def highlight_rows(row: object) -> list[str]:
-        row_dict = dict(row)
-        email_format = str(row_dict.get("Email Format Valid/Invalid", ""))
-        is_invalid = email_format.lower() != "valid"
-        bg = "background-color: #ffcccc" if is_invalid else ""
-        return [bg] * len(row_dict)
+    total = len(result_df)
+    valid_count = int((result_df["Overall Status"] == "VALID").sum())
+    risky_count = int((result_df["Overall Status"] == "RISKY").sum())
+    invalid_count = int((result_df["Overall Status"] == "INVALID").sum())
 
-    styled = result.style.apply(highlight_rows, axis=1)
-    st.dataframe(styled, width="stretch", hide_index=True)
+    st.markdown("---")
+    st.markdown("### Bulk Upload Summary")
 
-    csv_bytes = result.to_csv(index=False).encode("utf-8")
+    summary_cols = st.columns(4)
+    with summary_cols[0]:
+        st.metric("Total Emails", f"{total:,}")
+    with summary_cols[1]:
+        st.metric("Valid Emails", f"{valid_count:,}", delta_color="off")
+        st.markdown(
+            f"<p style='color:green; font-size:1.2rem; font-weight:bold;'"
+            f">🟢 {valid_count:,}</p>",
+            unsafe_allow_html=True,
+        )
+    with summary_cols[2]:
+        st.metric("Risky Emails", f"{risky_count:,}", delta_color="off")
+        st.markdown(
+            f"<p style='color:orange; font-size:1.2rem; font-weight:bold;'"
+            f">🟡 {risky_count:,}</p>",
+            unsafe_allow_html=True,
+        )
+    with summary_cols[3]:
+        st.metric("Invalid Emails", f"{invalid_count:,}", delta_color="off")
+        st.markdown(
+            f"<p style='color:red; font-size:1.2rem; font-weight:bold;'"
+            f">🔴 {invalid_count:,}</p>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+    st.markdown("### Detailed Results")
+
+    def highlight_status(val: object) -> str:
+        s = str(val)
+        if s == "VALID":
+            return "background-color: #d4edda; color: #155724"
+        if s == "RISKY":
+            return "background-color: #fff3cd; color: #856404"
+        if s == "INVALID":
+            return "background-color: #f8d7da; color: #721c24"
+        if s in ("Valid", "Yes"):
+            return "background-color: #d4edda; color: #155724"
+        if s in ("Invalid", "N/A"):
+            return "background-color: #f8d7da; color: #721c24"
+        return ""
+
+    styled_df = result_df.style.applymap(highlight_status, subset=[
+        "Overall Status", "Format", "Professional Domain",
+        "Domain Status", "Mailbox", "Disposable Email",
+        "Role Account", "First Name", "Last Name",
+    ])
+
+    st.dataframe(styled_df, width="stretch", hide_index=True)
+
+    st.markdown("---")
+    st.markdown("### Per-Email Detailed View")
+
+    email_list = result_df["Email"].tolist()
+    selected_email = st.selectbox("Select an email to view details", options=email_list)
+    if selected_email:
+        row = result_df[result_df["Email"] == selected_email].iloc[0]
+        overall = str(row.get("Overall Status", ""))
+
+        if overall == "VALID":
+            st.success(f"🟢 VALID — {selected_email}")
+        elif overall == "RISKY":
+            st.warning(f"🟡 RISKY — {selected_email}")
+        else:
+            st.error(f"🔴 INVALID — {selected_email}")
+
+        detail_items = [
+            ("First Name", "First Name", "green" if str(row.get("First Name")) != "Not Found" else "red"),
+            ("Last Name", "Last Name", "green" if str(row.get("Last Name")) != "Not Found" else "red"),
+            ("Format", "Format", "green" if str(row.get("Format")) == "Valid" else "red"),
+            ("Domain Status", "Domain Status", "green" if str(row.get("Domain Status")) == "Valid" else "red"),
+            ("Professional Domain", "Professional Domain", "green" if str(row.get("Professional Domain")) == "Valid" else "red"),
+            ("Disposable Email", "Disposable Email", "red" if str(row.get("Disposable Email")) == "Yes" else "green"),
+            ("Role Account", "Role Account", "red" if str(row.get("Role Account")) == "Yes" else "green"),
+            ("Mailbox", "Mailbox", "green" if str(row.get("Mailbox")) == "Valid" else "red"),
+            ("Catch-All", "Catch-All", "orange" if str(row.get("Catch-All")) == "Yes" else "green"),
+            ("Provider Type", "Provider Type", "green" if str(row.get("Provider Type")) == "Business" else "orange"),
+        ]
+
+        for label, key, color in detail_items:
+            val = str(row.get(key, ""))
+            icon_map = {"green": "✅", "red": "❌", "orange": "⚠️"}
+            st.markdown(
+                f"{icon_map[color]} **{label}:** "
+                f"<span style='color:{color}'>{val}</span>",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("")
+        score_val = str(row.get("Verification Score", ""))
+        result_val = str(row.get("Result", ""))
+        date_val = str(row.get("Verification Date", ""))
+        time_val = str(row.get("Verification Time", ""))
+
+        col_sc, col_re, col_dt = st.columns(3)
+        with col_sc:
+            st.markdown(f"**Score:** {score_val}")
+        with col_re:
+            result_icon = {"Deliverable": "🟢", "Risky": "🟡", "Undeliverable": "🔴"}
+            st.markdown(f"**Result:** {result_icon.get(result_val, '')} {result_val}")
+        with col_dt:
+            st.markdown(f"**Date:** {date_val} {time_val}")
+
+    st.markdown("---")
+    st.markdown("### Export Options")
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    st.download_button(
-        "Download CSV",
-        data=csv_bytes,
-        file_name=f"email_verification_results_{timestamp}.csv",
-        mime="text/csv",
-    )
+    base_name = f"email_verification_results_{timestamp}"
+
+    export_cols = st.columns(3)
+    with export_cols[0]:
+        csv_data = dataframe_to_csv_bytes(result_df)
+        st.download_button(
+            "📥 Download CSV",
+            data=csv_data,
+            file_name=f"{base_name}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+    with export_cols[1]:
+        xlsx_data = dataframe_to_xlsx_bytes(result_df)
+        st.download_button(
+            "📥 Download Excel (XLSX)",
+            data=xlsx_data,
+            file_name=f"{base_name}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+    with export_cols[2]:
+        try:
+            pdf_data = dataframe_to_pdf_bytes(result_df)
+            st.download_button(
+                "📥 Download PDF Report",
+                data=pdf_data,
+                file_name=f"{base_name}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+        except Exception as exc:
+            st.error(f"PDF generation failed: {exc}")
 
 
 def render_app() -> None:

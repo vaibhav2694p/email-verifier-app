@@ -4,6 +4,7 @@ __all__ = [
     "dns_checks",
     "email_checks",
     "enhanced_verifier",
+    "export_utils",
     "io",
     "linkedin",
     "name_extractor",
