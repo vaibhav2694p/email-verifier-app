@@ -27,16 +27,14 @@ STATUS_COL = "Final Status"
 
 
 def _status_fill(val: str) -> PatternFill:
-    if val in ("OK",):
+    if val in ("OK", "Valid"):
         return GREEN_FILL
-    elif val in ("Catch-All", "Risky"):
+    elif val in ("Catch-All", "Risky", "Unknown"):
         return YELLOW_FILL
     elif val in ("Invalid", "Disposable"):
         return RED_FILL
     elif val == "Duplicate":
         return GRAY_FILL
-    elif val == "Unknown":
-        return ORANGE_FILL
     return PatternFill()
 
 
@@ -74,6 +72,33 @@ def _color_rows(ws, df: pd.DataFrame) -> None:
 
 def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
+
+
+def dataframe_to_xlsx_preserve(
+    all_sheets: dict[str, pd.DataFrame],
+    verification_df: pd.DataFrame,
+) -> bytes:
+    base_name = "Email Verification Report"
+    sheet_name = base_name
+    counter = 2
+    while sheet_name in all_sheets:
+        sheet_name = f"{base_name} ({counter})"
+        counter += 1
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        for orig_name, orig_df in all_sheets.items():
+            orig_df.to_excel(writer, index=False, sheet_name=orig_name)
+
+        verification_df.to_excel(writer, index=False, sheet_name=sheet_name)
+        ws = writer.sheets[sheet_name]
+        _style_header(ws, verification_df)
+        _apply_column_widths(ws, verification_df)
+        _color_rows(ws, verification_df)
+        _build_summary_sheet(writer, verification_df)
+        _build_separate_sheets(writer, verification_df)
+
+    return output.getvalue()
 
 
 def dataframe_to_xlsx_bytes(df: pd.DataFrame) -> bytes:
@@ -146,7 +171,7 @@ def _build_summary_sheet(writer: pd.ExcelWriter, df: pd.DataFrame) -> None:
         4: YELLOW_FILL,
         5: RED_FILL,
         6: RED_FILL,
-        7: ORANGE_FILL,
+        7: YELLOW_FILL,
         8: GRAY_FILL,
     }
     for row_num, fill in fill_map.items():
@@ -156,16 +181,14 @@ def _build_summary_sheet(writer: pd.ExcelWriter, df: pd.DataFrame) -> None:
 
     ws.cell(row=12, column=1).value = "Color Coding:"
     ws.cell(row=12, column=1).font = Font(bold=True)
-    ws.cell(row=13, column=1).value = "🟢 Green  = OK (Send)"
+    ws.cell(row=13, column=1).value = "🟢 Green  = OK / Valid"
     ws.cell(row=13, column=1).fill = GREEN_FILL
-    ws.cell(row=14, column=1).value = "🟡 Yellow = Catch-All / Risky"
+    ws.cell(row=14, column=1).value = "🟡 Yellow = Catch-All / Risky / Unknown"
     ws.cell(row=14, column=1).fill = YELLOW_FILL
     ws.cell(row=15, column=1).value = "🔴 Red    = Invalid / Disposable"
     ws.cell(row=15, column=1).fill = RED_FILL
-    ws.cell(row=16, column=1).value = "🟠 Orange = Unknown"
-    ws.cell(row=16, column=1).fill = ORANGE_FILL
-    ws.cell(row=17, column=1).value = "⬜ Gray   = Duplicate"
-    ws.cell(row=17, column=1).fill = GRAY_FILL
+    ws.cell(row=16, column=1).value = "⬜ Gray   = Duplicate"
+    ws.cell(row=16, column=1).fill = GRAY_FILL
 
 
 def _build_separate_sheets(writer: pd.ExcelWriter, df: pd.DataFrame) -> None:

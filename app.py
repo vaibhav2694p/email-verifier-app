@@ -10,6 +10,7 @@ from email_verifier.export_utils import (
     dataframe_to_csv_bytes,
     dataframe_to_pdf_bytes,
     dataframe_to_xlsx_bytes,
+    dataframe_to_xlsx_preserve,
     dataframe_valid_xlsx_bytes,
     dataframe_risky_xlsx_bytes,
     dataframe_invalid_xlsx_bytes,
@@ -18,7 +19,7 @@ from email_verifier.io import (
     ColumnMapping,
     get_default_column_index,
     infer_column,
-    read_uploaded_table,
+    read_uploaded_table_all_sheets,
 )
 from email_verifier.processor import VerificationOptions, process_dataframe
 
@@ -76,10 +77,10 @@ def render_single_verification() -> None:
     st.markdown("━━━━━━━━━━━━━━━━━━━━")
 
     checks_table = [
-        ("Syntax Check", result.format_check.status, "Valid" == result.format_check.status),
-        ("Domain Check", "Valid" if result.domain_exists else "Invalid", result.domain_exists),
+        ("Format Status", result.format_check.status, "Valid" == result.format_check.status),
+        ("Domain Status", "Valid" if result.domain_exists else "Domain Not Found", result.domain_exists),
         ("MX Record", "Found" if result.mx_records_available else "Missing", result.mx_records_available),
-        ("SMTP Verification", result.smtp_status or "Unknown", result.smtp_status == "Exists"),
+        ("Mailbox", result.smtp_status or "Unknown", result.smtp_status == "Exists"),
         ("Catch-All", "Yes" if result.catch_all is True else "No", result.catch_all is not True),
         ("Disposable", "Yes" if result.disposable_email else "No", not result.disposable_email),
         ("Role Account", "Yes" if result.role_account else "No", not result.role_account),
@@ -185,7 +186,7 @@ def render_bulk_verification() -> None:
         return
 
     try:
-        dataframe = read_uploaded_table(uploaded_file)
+        dataframe, original_sheets = read_uploaded_table_all_sheets(uploaded_file)
     except ValueError as exc:
         st.error(str(exc))
         return
@@ -319,8 +320,8 @@ def render_bulk_verification() -> None:
             return "background-color:#f8d7da;color:#721c24"
         return ""
 
-    hl_cols = [STATUS_COL, "Syntax Check", "Domain Check", "MX Record",
-               "SMTP Verification", "Disposable", "Role Account", "Duplicate",
+    hl_cols = [STATUS_COL, "Format Status", "Domain Status", "MX Record",
+               "SMTP Status", "Disposable", "Role Account", "Duplicate",
                "First Name", "Last Name"]
     valid_cols = [c for c in hl_cols if c in result_df.columns]
     styled_df = result_df.style.applymap(highlight, subset=valid_cols)
@@ -340,10 +341,10 @@ def render_bulk_verification() -> None:
         st.markdown(f"### {icon_c} {fs} — {selected_email}")
 
         checks = [
-            ("Syntax Check", "Syntax Check", "Valid"),
-            ("Domain Check", "Domain Check", "Valid"),
+            ("Format", "Format Status", "Valid"),
+            ("Domain Status", "Domain Status", "Valid"),
             ("MX Record", "MX Record", "Found"),
-            ("SMTP Verification", "SMTP Verification", "Exists"),
+            ("Mailbox", "SMTP Status", "Exists"),
             ("Catch-All", "Catch-All", "No"),
             ("Disposable", "Disposable", "No"),
             ("Role Account", "Role Account", "No"),
@@ -391,8 +392,13 @@ def render_bulk_verification() -> None:
                 file_name=f"{base}.csv", mime="text/csv", use_container_width=True,
             )
         with e2:
+            xlsx_bytes = (
+                dataframe_to_xlsx_preserve(original_sheets, result_df)
+                if original_sheets is not None
+                else dataframe_to_xlsx_bytes(result_df)
+            )
             st.download_button(
-                "📗 Download Full Report (XLSX)", data=dataframe_to_xlsx_bytes(result_df),
+                "📗 Download Full Report (XLSX)", data=xlsx_bytes,
                 file_name=f"{base}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,

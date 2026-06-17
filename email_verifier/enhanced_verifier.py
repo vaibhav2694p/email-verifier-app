@@ -228,8 +228,6 @@ def _determine_final_status(result: EnhancedVerificationResult) -> str:
         return "Catch-All"
     if result.smtp_status == "Exists":
         return "OK"
-    if result.smtp_status == "Not Found":
-        return "Invalid"
     return "Unknown"
 
 

@@ -46,6 +46,38 @@ COLUMN_ALIASES: dict[ColumnRole, tuple[str, ...]] = {
 }
 
 
+def read_uploaded_table_all_sheets(
+    uploaded_file: object,
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame] | None]:
+    filename = getattr(uploaded_file, "name", "")
+    extension = Path(filename).suffix.lower()
+
+    if extension == ".xlsx":
+        xls = pd.ExcelFile(uploaded_file, engine="openpyxl")
+        all_sheets: dict[str, pd.DataFrame] = {}
+        for sheet_name in xls.sheet_names:
+            sheet_df = pd.read_excel(
+                xls, sheet_name=sheet_name, dtype=str, keep_default_na=False
+            )
+            sheet_df.columns = deduplicate_columns(
+                [str(c).strip() for c in sheet_df.columns]
+            )
+            sheet_df = sheet_df.fillna("")
+            all_sheets[sheet_name] = sheet_df
+
+        primary_df = all_sheets[xls.sheet_names[0]]
+
+        if primary_df.empty:
+            raise ValueError("The uploaded file has no rows.")
+        if not primary_df.columns.any():
+            raise ValueError("The uploaded file has no columns.")
+
+        return primary_df, all_sheets
+
+    df = read_uploaded_table(uploaded_file)
+    return df, None
+
+
 def read_uploaded_table(uploaded_file: object) -> pd.DataFrame:
     filename = getattr(uploaded_file, "name", "")
     extension = Path(filename).suffix.lower()
