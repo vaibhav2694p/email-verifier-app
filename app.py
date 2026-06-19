@@ -26,6 +26,9 @@ SB_GREY      = "#6B7280"
 SB_BORDER    = "#E2E8F0"
 
 LOGO_PATHS = [
+    "Safebooks Global Logo.png",
+    "assets/Safebooks Global Logo.png",
+    "static/Safebooks Global Logo.png",
     "LinkedIn Banner Resize (1586\u00d7390).jpg",
     "assets/LinkedIn Banner Resize (1586\u00d7390).jpg",
     "static/LinkedIn Banner Resize (1586\u00d7390).jpg",
@@ -272,15 +275,25 @@ def render_app() -> None:
 
     # ── Header banner ──────────────────────────────────────────────────
     logo_file = _find_logo()
-    logo_html = ""
-    if logo_file:
-        logo_html = f'<img class="banner-logo" src="data:image/jpeg;base64,{_img_to_b64(logo_file)}" alt="Safebooks Global" />'
 
-    st.markdown(f"""
-    <div class="banner-wrapper">
-        {logo_html}
-        <h1 class="banner-title">Email Verifier</h1>
-        <p class="banner-subtitle">Upload your email list and verify domains, MX records, providers, and website status.</p>
+    st.markdown("""<div class="banner-wrapper" style="
+        background: linear-gradient(135deg, #0055A5 0%, #003D73 100%);
+        border-radius: 0 0 20px 20px;
+        padding: 28px 20px 28px 20px;
+        margin: -10px -10px 28px -10px;
+        box-shadow: 0 4px 20px rgba(0, 85, 165, 0.18);
+        text-align: center;
+    "></div>""", unsafe_allow_html=True)
+
+    if logo_file:
+        st.image(logo_file, use_container_width=True)
+
+    st.markdown("""
+    <div style="text-align:center; margin-top:-10px; margin-bottom:20px;">
+        <h1 style="color:#1B2A4A; font-size:34px; font-weight:800; margin:0 0 6px 0; letter-spacing:-0.3px;">
+            Email Verifier</h1>
+        <p style="color:#6B7DAA; font-size:15px; font-weight:400; margin:0;">
+            Upload your email list and verify domains, MX records, providers, and website status.</p>
     </div>
     """, unsafe_allow_html=True)
 
