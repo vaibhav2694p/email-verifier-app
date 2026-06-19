@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "safe-email-check"
+version = "0.1.0"
+description = "RFC-compliant email validation with signup/login support"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "email-validator>=2.1,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+]
+
+[tool.setuptools.packages.find]
+include = ["safe_email_check*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
