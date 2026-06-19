@@ -16,6 +16,7 @@ from email_verifier.export_utils import (
     dataframe_invalid_xlsx_bytes,
 )
 from email_verifier.domain_provider import render_domain_provider_checker
+from email_verifier.new_verifier import render_domain_verification
 from email_verifier.io import (
     ColumnMapping,
     get_default_column_index,
@@ -453,7 +454,12 @@ def render_bulk_verification() -> None:
 def render_app() -> None:
     st.title("Email Verifier")
 
-    tab1, tab2, tab3 = st.tabs(["🔍 Single Verification", "📊 Bulk Upload", "🌐 Domain Provider Checker"])
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🔍 Single Verification",
+        "📊 Bulk Upload",
+        "🌐 Domain Provider Checker",
+        "✅ Domain & Email Verification",
+    ])
 
     with tab1:
         render_single_verification()
@@ -463,6 +469,9 @@ def render_app() -> None:
 
     with tab3:
         render_domain_provider_checker()
+
+    with tab4:
+        render_domain_verification()
 
 
 if __name__ == "__main__":
