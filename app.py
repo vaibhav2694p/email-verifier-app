@@ -13,9 +13,12 @@ from utils import (
     is_role_based_email,
     detect_email_provider,
     lookup_mx_records,
+    lookup_spf_record,
+    lookup_dmarc_record,
     check_domain_website,
     calculate_verification_score,
 )
+from utils.scoring import score_to_status
 
 st.set_page_config(
     page_title="Email Verifier",
@@ -179,6 +182,7 @@ header {visibility: hidden;}
 }
 .metric-card.metric-total .metric-value { color: #1e3a5f; }
 .metric-card.metric-verified .metric-value { color: #16a34a; }
+.metric-card.metric-average .metric-value { color: #2563eb; }
 .metric-card.metric-risky .metric-value { color: #d97706; }
 .metric-card.metric-invalid .metric-value { color: #dc2626; }
 
@@ -230,6 +234,7 @@ header {visibility: hidden;}
     white-space: nowrap;
 }
 .sbadge-verified { background: #dcfce7; color: #166534; }
+.sbadge-average  { background: #dbeafe; color: #1e40af; }
 .sbadge-risky    { background: #fef3c7; color: #92400e; }
 .sbadge-invalid  { background: #fee2e2; color: #991b1b; }
 .sbadge-nomx     { background: #f1f5f9; color: #475569; }
@@ -373,6 +378,7 @@ def render_logo():
 def badge(status: str) -> str:
     mapping = {
         "Verified":             ("sbadge-verified", "Verified"),
+        "Average":              ("sbadge-average", "Average"),
         "Risky":                ("sbadge-risky", "Risky"),
         "Invalid":              ("sbadge-invalid", "Invalid"),
         "No MX Found":          ("sbadge-nomx", "No MX"),
@@ -470,15 +476,16 @@ def main():
         # summary metrics
         total = len(rdf)
         verified = int((rdf["Verification Status"] == "Verified").sum())
+        average = int((rdf["Verification Status"] == "Average").sum())
         risky = int((rdf["Verification Status"] == "Risky").sum())
         invalid = int((rdf["Verification Status"] == "Invalid").sum())
-        nomx = int((rdf["Verification Status"] == "No MX Found").sum())
 
         st.markdown('<div class="metric-grid">', unsafe_allow_html=True)
         for cls, label, value in [
             ("metric-total", "Total", total),
             ("metric-verified", "Verified", verified),
-            ("metric-risky", "Risky", risky + nomx),
+            ("metric-average", "Average", average),
+            ("metric-risky", "Risky", risky),
             ("metric-invalid", "Invalid", invalid),
         ]:
             st.markdown(
@@ -538,15 +545,17 @@ def main():
         """, unsafe_allow_html=True)
 
 
-# ── Backend (unchanged) ────────────────────────────────────────────────
+# ── Backend ────────────────────────────────────────────────────────────
 def process_email_row(row, email_column, company_domain_column=None):
     result = {
         "Email": "",
         "Normalized Email": "",
         "Domain": "",
-        "Domain Active": "No",
+        "Domain Active": "Not Active",
         "Website Status": "Not Checked",
         "MX Status": "Not Checked",
+        "SPF Record": "Not Checked",
+        "DMARC Record": "Not Checked",
         "Email Provider": "Unknown",
         "Verification Status": "Invalid",
         "Verification Score": 0,
@@ -583,51 +592,10 @@ def process_email_row(row, email_column, company_domain_column=None):
         result["Notes"] = "Invalid domain after cleaning"
         return result
 
-    try:
-        if is_disposable_domain(clean_domain_val):
-            result["Verification Status"] = "Disposable"
-            result["Verification Score"] = min(
-                10,
-                calculate_verification_score(
-                    normalized_email,
-                    clean_domain_val,
-                    False,
-                    False,
-                    "Unknown/Other",
-                    None,
-                    False,
-                    True,
-                    False,
-                ),
-            )
-            result["Notes"] = "Disposable email domain detected"
-            return result
-    except Exception as e:
-        result["Notes"] += f"; Disposable check error: {str(e)}"
-
-    try:
-        if is_public_email_domain(clean_domain_val):
-            result["Verification Status"] = "Public Email"
-            result["Verification Score"] = min(
-                45,
-                calculate_verification_score(
-                    normalized_email,
-                    clean_domain_val,
-                    False,
-                    False,
-                    "Unknown/Other",
-                    None,
-                    False,
-                    False,
-                    True,
-                ),
-            )
-            result["Notes"] = "Public/free email domain detected"
-            return result
-    except Exception as e:
-        result["Notes"] += f"; Public email check error: {str(e)}"
-
+    # ── DNS checks ─────────────────────────────────────────────────────
     mx_records = "Not Checked"
+    spf_record = "Not Checked"
+    dmarc_record = "Not Checked"
     website_active = False
     website_status = "Not Checked"
     email_provider = "Unknown"
@@ -635,28 +603,54 @@ def process_email_row(row, email_column, company_domain_column=None):
     try:
         mx_records = lookup_mx_records(clean_domain_val)
         result["MX Status"] = mx_records
-
-        has_mx = mx_records != "No MX Found" and mx_records not in ["Timeout", "Error"]
-
-        website_active, website_status, _ = check_domain_website(clean_domain_val)
-        result["Domain Active"] = "Yes" if website_active else "No"
-        result["Website Status"] = website_status
-
-        if has_mx:
-            email_provider = detect_email_provider(mx_records)
-            result["Email Provider"] = email_provider
-
     except Exception as e:
-        result["Notes"] += f"; Domain check error: {str(e)}"
+        result["Notes"] += f"; MX error: {str(e)}"
         mx_records = "Error"
         result["MX Status"] = mx_records
 
     try:
+        spf_record = lookup_spf_record(clean_domain_val)
+        result["SPF Record"] = spf_record
+    except Exception as e:
+        result["Notes"] += f"; SPF error: {str(e)}"
+        spf_record = "Error"
+        result["SPF Record"] = spf_record
+
+    try:
+        dmarc_record = lookup_dmarc_record(clean_domain_val)
+        result["DMARC Record"] = dmarc_record
+    except Exception as e:
+        result["Notes"] += f"; DMARC error: {str(e)}"
+        dmarc_record = "Error"
+        result["DMARC Record"] = dmarc_record
+
+    try:
+        website_active, website_status, _ = check_domain_website(clean_domain_val)
+        result["Domain Active"] = "Active" if website_active else "Not Active"
+        result["Website Status"] = website_status
+    except Exception as e:
+        result["Notes"] += f"; Website error: {str(e)}"
+
+    has_mx = mx_records not in [
+        "No MX Found", "Timeout", "Error", "No Nameservers", "Not Checked", ""
+    ]
+    has_spf = isinstance(spf_record, str) and spf_record.lower().startswith("v=spf1")
+    has_dmarc = isinstance(dmarc_record, str) and dmarc_record.lower().startswith("v=dmarc1")
+
+    if has_mx:
+        try:
+            email_provider = detect_email_provider(mx_records)
+            result["Email Provider"] = email_provider
+        except Exception:
+            pass
+
+    # ── Role-based check ───────────────────────────────────────────────
+    try:
         is_role = is_role_based_email(normalized_email)
     except Exception:
         is_role = False
-        result["Notes"] += "; Role-based check error"
 
+    # ── Company domain match ───────────────────────────────────────────
     company_match = None
     if (
         company_domain_column
@@ -670,46 +664,40 @@ def process_email_row(row, email_column, company_domain_column=None):
                 if company_domain_val
                 else False
             )
-        except Exception as e:
+        except Exception:
             company_match = None
-            result["Notes"] += f"; Company domain check error: {str(e)}"
 
-    has_mx_flag = (
-        mx_records not in ["No MX Found", "Timeout", "Error"] and mx_records != ""
-    )
+    # ── Scoring ────────────────────────────────────────────────────────
+    is_disposable = is_disposable_domain(clean_domain_val)
+    is_public = is_public_email_domain(clean_domain_val)
 
     try:
         score = calculate_verification_score(
             normalized_email=normalized_email,
             domain=clean_domain_val,
-            has_mx=has_mx_flag,
+            has_mx=has_mx,
             website_active=website_active,
             email_provider=email_provider,
             company_match=company_match,
             is_role_based=is_role,
-            is_disposable=False,
-            is_public_email=False,
+            is_disposable=is_disposable,
+            is_public_email=is_public,
+            has_spf=has_spf,
+            has_dmarc=has_dmarc,
         )
         result["Verification Score"] = score
     except Exception as e:
         result["Verification Score"] = 0
-        result["Notes"] += f"; Score calculation error: {str(e)}"
+        result["Notes"] += f"; Score error: {str(e)}"
 
-    if result["Verification Status"] not in ["Disposable", "Public Email"]:
-        if not has_mx_flag:
-            result["Verification Status"] = "No MX Found"
-        elif (
-            company_match is False
-            and company_domain_column
-            and company_domain_column in row
-        ):
-            result["Verification Status"] = "Company Domain Mismatch"
-        elif is_role:
-            result["Verification Status"] = "Risky"
-        else:
-            result["Verification Status"] = "Verified"
+    result["Verification Status"] = score_to_status(result["Verification Score"])
 
+    # ── Notes ──────────────────────────────────────────────────────────
     notes_parts = []
+    if is_disposable:
+        notes_parts.append("Disposable email domain")
+    if is_public:
+        notes_parts.append("Public/free email domain")
     if is_role:
         notes_parts.append("Role-based email")
     if (
@@ -718,7 +706,7 @@ def process_email_row(row, email_column, company_domain_column=None):
         and company_domain_column in row
     ):
         notes_parts.append("Company domain mismatch")
-    if not website_active and has_mx_flag:
+    if not website_active:
         notes_parts.append("Website not reachable")
 
     if notes_parts:
@@ -746,7 +734,8 @@ def convert_df_to_excel(df):
 
     report_df["MX Yes/No"] = report_df["MX Status"].apply(
         lambda x: "Yes" if x not in [
-            "No MX Found", "Timeout", "Error", "Not Checked", ""
+            "No MX Found", "Timeout", "Error", "No Nameservers",
+            "Not Checked", "",
         ] else "No"
     )
 
@@ -764,13 +753,13 @@ def convert_df_to_excel(df):
     else:
         report_df["DMARC Yes/No"] = ""
 
-    report_df["Domain Active/Not Active"] = report_df["Domain Active"].apply(
-        lambda x: "Yes" if str(x).strip().lower() == "yes" else "No"
+    report_df["Domain Status"] = report_df["Domain Active"].apply(
+        lambda x: "Active" if str(x).strip().lower() == "active" else "Not Active"
     )
 
     report_columns = [
         "Email", "Domain", "MX Yes/No", "SPF Yes/No", "DMARC Yes/No",
-        "Domain Active/Not Active", "Verification Score",
+        "Domain Status", "Verification Score",
         "Verification Status", "Notes",
     ]
 
@@ -791,7 +780,8 @@ def convert_df_to_csv(df):
 
     report_df["MX Yes/No"] = report_df["MX Status"].apply(
         lambda x: "Yes" if x not in [
-            "No MX Found", "Timeout", "Error", "Not Checked", ""
+            "No MX Found", "Timeout", "Error", "No Nameservers",
+            "Not Checked", "",
         ] else "No"
     )
 
@@ -809,13 +799,13 @@ def convert_df_to_csv(df):
     else:
         report_df["DMARC Yes/No"] = ""
 
-    report_df["Domain Active/Not Active"] = report_df["Domain Active"].apply(
-        lambda x: "Yes" if str(x).strip().lower() == "yes" else "No"
+    report_df["Domain Status"] = report_df["Domain Active"].apply(
+        lambda x: "Active" if str(x).strip().lower() == "active" else "Not Active"
     )
 
     report_columns = [
         "Email", "Domain", "MX Yes/No", "SPF Yes/No", "DMARC Yes/No",
-        "Domain Active/Not Active", "Verification Score",
+        "Domain Status", "Verification Score",
         "Verification Status", "Notes",
     ]
 

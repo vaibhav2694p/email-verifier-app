@@ -7,7 +7,7 @@ from utils.email_checks import (
     is_role_based_email,
 )
 from utils.domain_checks import clean_domain
-from utils.scoring import calculate_verification_score
+from utils.scoring import calculate_verification_score, score_to_status
 
 
 def test_public_email_scoring():
@@ -24,8 +24,10 @@ def test_public_email_scoring():
         is_role_based=False,
         is_disposable=False,
         is_public_email=True,
+        has_spf=False,
+        has_dmarc=False,
     )
-    assert score <= 45, f"Public email scored {score}, expected <= 45"
+    assert score == 65, f"Public email scored {score}, expected 65"
 
 
 def test_nonexistent_domain():
@@ -46,7 +48,7 @@ def test_nonexistent_domain():
         is_disposable=False,
         is_public_email=False,
     )
-    assert score <= 20, f"Nonexistent domain scored {score}, expected <= 20"
+    assert score == 30, f"Nonexistent domain scored {score}, expected 30"
 
 
 def test_role_based_email():
@@ -64,7 +66,7 @@ def test_role_based_email():
         is_disposable=False,
         is_public_email=False,
     )
-    assert score < 90, f"Role-based email scored {score}, expected < 90"
+    assert score == 85, f"Role-based email scored {score}, expected 85"
 
 
 def test_high_score_conditions():
@@ -82,7 +84,7 @@ def test_high_score_conditions():
         is_disposable=False,
         is_public_email=False,
     )
-    assert score >= 80, f"Ideal email scored {score}, expected >= 80"
+    assert score == 100, f"Ideal email scored {score}, expected 100"
 
 
 def test_company_mismatch():
@@ -100,7 +102,7 @@ def test_company_mismatch():
         is_disposable=False,
         is_public_email=False,
     )
-    assert score <= 50, f"Company mismatch scored {score}, expected <= 50"
+    assert score == 65, f"Company mismatch scored {score}, expected 65"
 
 
 def test_invalid_email():
@@ -118,7 +120,7 @@ def test_invalid_email():
         is_disposable=False,
         is_public_email=False,
     )
-    assert score <= 20, f"Invalid email scored {score}, expected <= 20 (no MX cap)"
+    assert score == 30, f"Invalid email scored {score}, expected 30"
 
 
 def test_disposable_email():
@@ -129,14 +131,56 @@ def test_disposable_email():
         normalized_email=normalized,
         domain=domain,
         has_mx=True,
-        website_active=True,
+        website_active=False,
         email_provider="Unknown/Other",
         company_match=None,
         is_role_based=False,
         is_disposable=True,
         is_public_email=False,
     )
-    assert score <= 10, f"Disposable email scored {score}, expected <= 10"
+    assert score == 40, f"Disposable email scored {score}, expected 40"
+
+
+def test_spf_dmarc_bonus():
+    email = "user@example.com"
+    normalized = validate_and_normalize_email(email)
+    domain = extract_email_domain(normalized)
+    score_with = calculate_verification_score(
+        normalized_email=normalized,
+        domain=domain,
+        has_mx=True,
+        website_active=True,
+        email_provider="Unknown/Other",
+        company_match=None,
+        is_role_based=False,
+        has_spf=True,
+        has_dmarc=True,
+    )
+    score_without = calculate_verification_score(
+        normalized_email=normalized,
+        domain=domain,
+        has_mx=True,
+        website_active=True,
+        email_provider="Unknown/Other",
+        company_match=None,
+        is_role_based=False,
+        has_spf=False,
+        has_dmarc=False,
+    )
+    assert score_with - score_without == 20, (
+        f"SPF+DMARC bonus expected 20, got {score_with - score_without}"
+    )
+
+
+def test_score_to_status():
+    assert score_to_status(0) == "Invalid"
+    assert score_to_status(50) == "Invalid"
+    assert score_to_status(51) == "Risky"
+    assert score_to_status(65) == "Risky"
+    assert score_to_status(66) == "Average"
+    assert score_to_status(84) == "Average"
+    assert score_to_status(85) == "Verified"
+    assert score_to_status(100) == "Verified"
 
 
 def test_clean_domain():

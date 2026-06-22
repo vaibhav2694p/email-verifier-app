@@ -9,6 +9,8 @@ from .email_checks import (
 from .domain_checks import (
     clean_domain,
     lookup_mx_records,
+    lookup_spf_record,
+    lookup_dmarc_record,
     check_domain_website,
 )
 from .scoring import calculate_verification_score
@@ -22,6 +24,8 @@ __all__ = [
     "detect_email_provider",
     "clean_domain",
     "lookup_mx_records",
+    "lookup_spf_record",
+    "lookup_dmarc_record",
     "check_domain_website",
     "calculate_verification_score",
 ]
