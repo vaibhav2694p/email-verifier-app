@@ -1,76 +1,80 @@
-# safe_email_check
+# Email Verifier
 
-A safe, RFC-compliant email validation library for Python.
+A Streamlit application for verifying email lists with domain validation, MX checks, and scoring.
 
-## Philosophy
+## Features
+- Single-page interface with professional UI
+- Safebooks Global branding
+- CSV/XLSX file upload
+- Email validation with syntax normalization
+- Domain extraction and cleaning
+- MX record lookup with DNS timeout handling
+- Website reachability checking
+- Email provider detection (Google, Microsoft, etc.)
+- Disposable email detection
+- Public email domain detection
+- Role-based email identification
+- Company domain matching verification
+- Accurate scoring system (0-100)
+- Results table with status badges
+- Excel and CSV download options
 
-- **Signup validation**: Full syntax + domain deliverability checks (MX/DNS).
-- **Login validation**: Syntax only — no slow DNS lookups before database lookup.
-- **No SMTP probing**: Does not connect to mail servers or probe mailboxes.
-- **No fake scores**: Does not assign arbitrary confidence scores.
-- **Internationalized**: Supports Unicode emails and IDN domains.
+## Installation
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Place the Safebooks Global logo at `assets/safebooks_logo.png`
 
-## Quick Start
-
-```python
-from safe_email_check import validate_signup_email, validate_login_email
-
-# During signup — validates syntax + domain deliverability
-result = validate_signup_email("User <Test@Example.com>", allow_display_name=True)
-print(result.normalized_email)   # "test@example.com" ← store this
-print(result.domain)             # "example.com"
-print(result.display_name)       # "User"
-print(result.is_deliverable)     # True (MX records exist)
-
-# During login — syntax only, no DNS
-result = validate_login_email("user@example.com")
-print(result.is_deliverable)     # None (not checked)
+## Usage
+Run the application:
+```bash
+streamlit run app.py
 ```
+1. Upload your CSV or XLSX file containing email addresses
+2. Select the email column
+3. (Optional) Select a company domain column for matching verification
+4. Click "Verify Emails"
+5. View results and download as Excel or CSV
 
-## API
+## Output Columns
+- **Email**: Original email address
+- **Normalized Email**: Validated and normalized email
+- **Domain**: Extracted domain from email
+- **Domain Active**: Whether website is reachable (Yes/No)
+- **Website Status**: Detailed website check result
+- **MX Status**: MX records found or error status
+- **Email Provider**: Detected email service provider
+- **Verification Status**: Final status (Verified, Risky, Invalid, etc.)
+- **Verification Score**: Score from 0-100 based on verification checks
+- **Notes**: Additional information about the verification
 
-### `validate_signup_email(email, allow_display_name=False)`
+## Scoring Logic
+The application uses a weighted scoring system with caps:
 
-Validates email with full deliverability (MX/DNS) checks. Raises `SafeEmailError` if the domain cannot receive mail.
+| Check | Points |
+|-------|--------|
+| Valid email syntax | +10 |
+| MX records found | +20 |
+| Website active | +15 |
+| Known email provider | +10 |
+| Company domain match | +30 |
+| Not public/free email | +10 |
+| Not disposable | +10 |
+| Role-based email | -10 |
 
-### `validate_login_email(email, allow_display_name=False)`
+Score caps (applied in order):
+- Invalid syntax: 0
+- Disposable email: max 10
+- No MX found: max 20
+- Public/free email: max 45
+- Company domain mismatch: max 50
 
-Validates syntax only. No DNS queries. Use this before looking up the user in your database.
+Final score is clamped between 0-100.
 
-### `validate_email_address(email, *, check_deliverability=True, allow_display_name=False, test_environment=False)`
-
-Low-level function with full control.
-
-## Return Value
-
-All functions return an `EmailCheckResult` dataclass:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `original` | `str` | Input as provided |
-| `normalized_email` | `str` | Lowercased, normalized form — store this |
-| `local_part` | `str` | Part before `@` |
-| `domain` | `str` | Part after `@` |
-| `ascii_email` | `str or None` | Punycode-encoded form |
-| `ascii_domain` | `str or None` | Punycode-encoded domain |
-| `display_name` | `str or None` | Parsed display name (if allowed) |
-| `deliverability_checked` | `bool` | Whether DNS was checked |
-| `is_deliverable` | `bool or None` | `True` if DNS checks passed, `None` if skipped |
-
-## Errors
-
-`SafeEmailError` (subclass of `ValueError`) is raised on:
-
-- Invalid syntax
-- Disposable/role-based detection (if configured)
-- Domain without MX records (only in signup mode)
-- Localhost / special-use domains (unless `test_environment=True`)
-
-## Rules
-
-1. **Use `validate_signup_email` during account creation** — confirms the domain can receive mail.
-2. **Use `validate_login_email` before database lookup** — fast syntax check only.
-3. **Store only `normalized_email`** in your database.
-4. **DNS checks can be slow** (1-5 seconds) — never run them on login.
-5. **This library validates address format and domain deliverability**, not actual mailbox ownership.
-6. **Email ownership still requires sending a verification email** to the address.
+## Important Notes
+- MX records indicate server configuration, not mailbox existence
+- Public email domains (Gmail, Yahoo, etc.) are capped at 45 points
+- True email ownership verification requires sending a confirmation email
+- The application does not perform SMTP mailbox probing for security and privacy reasons
