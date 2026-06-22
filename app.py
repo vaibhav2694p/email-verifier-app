@@ -741,14 +741,90 @@ def _guess_email_col(cols):
 
 def convert_df_to_excel(df):
     from io import BytesIO
+
+    report_df = df.copy()
+
+    report_df["MX Yes/No"] = report_df["MX Status"].apply(
+        lambda x: "Yes" if x not in [
+            "No MX Found", "Timeout", "Error", "Not Checked", ""
+        ] else "No"
+    )
+
+    if "SPF Record" in report_df.columns:
+        report_df["SPF Yes/No"] = report_df["SPF Record"].apply(
+            lambda x: "Yes" if isinstance(x, str) and x.lower().startswith("v=spf1") else "No"
+        )
+    else:
+        report_df["SPF Yes/No"] = ""
+
+    if "DMARC Record" in report_df.columns:
+        report_df["DMARC Yes/No"] = report_df["DMARC Record"].apply(
+            lambda x: "Yes" if isinstance(x, str) and x.lower().startswith("v=dmarc1") else "No"
+        )
+    else:
+        report_df["DMARC Yes/No"] = ""
+
+    report_df["Domain Active/Not Active"] = report_df["Domain Active"].apply(
+        lambda x: "Yes" if str(x).strip().lower() == "yes" else "No"
+    )
+
+    report_columns = [
+        "Email", "Domain", "MX Yes/No", "SPF Yes/No", "DMARC Yes/No",
+        "Domain Active/Not Active", "Verification Score",
+        "Verification Status", "Notes",
+    ]
+
+    for col in report_columns:
+        if col not in report_df.columns:
+            report_df[col] = ""
+
+    final_report = report_df[report_columns].copy()
+
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as w:
-        df.to_excel(w, index=False, sheet_name="Results")
+        final_report.to_excel(w, index=False, sheet_name="Results")
     return buf.getvalue()
 
 
 def convert_df_to_csv(df):
-    return df.to_csv(index=False).encode("utf-8")
+    report_df = df.copy()
+
+    report_df["MX Yes/No"] = report_df["MX Status"].apply(
+        lambda x: "Yes" if x not in [
+            "No MX Found", "Timeout", "Error", "Not Checked", ""
+        ] else "No"
+    )
+
+    if "SPF Record" in report_df.columns:
+        report_df["SPF Yes/No"] = report_df["SPF Record"].apply(
+            lambda x: "Yes" if isinstance(x, str) and x.lower().startswith("v=spf1") else "No"
+        )
+    else:
+        report_df["SPF Yes/No"] = ""
+
+    if "DMARC Record" in report_df.columns:
+        report_df["DMARC Yes/No"] = report_df["DMARC Record"].apply(
+            lambda x: "Yes" if isinstance(x, str) and x.lower().startswith("v=dmarc1") else "No"
+        )
+    else:
+        report_df["DMARC Yes/No"] = ""
+
+    report_df["Domain Active/Not Active"] = report_df["Domain Active"].apply(
+        lambda x: "Yes" if str(x).strip().lower() == "yes" else "No"
+    )
+
+    report_columns = [
+        "Email", "Domain", "MX Yes/No", "SPF Yes/No", "DMARC Yes/No",
+        "Domain Active/Not Active", "Verification Score",
+        "Verification Status", "Notes",
+    ]
+
+    for col in report_columns:
+        if col not in report_df.columns:
+            report_df[col] = ""
+
+    final_report = report_df[report_columns].copy()
+    return final_report.to_csv(index=False).encode("utf-8")
 
 
 if __name__ == "__main__":
