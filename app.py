@@ -24,44 +24,54 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ── Custom CSS ─────────────────────────────────────────────────────────
+# ── Custom CSS (fully responsive) ──────────────────────────────────────
 st.markdown("""
 <style>
+/* ── hide chrome ───────────────────────────────────────────── */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
 
+/* ── page ──────────────────────────────────────────────────── */
 .block-container {
     padding-top: 1.5rem !important;
     padding-bottom: 2rem !important;
     background-color: #f4f6f9 !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
 }
 
-/* ---- header ---- */
+/* ── header ────────────────────────────────────────────────── */
 .header-wrap {
     text-align: center;
-    margin-bottom: 1.8rem;
+    margin: 0 auto 1.8rem;
+    max-width: 100%;
+    padding: 0 0.5rem;
+    box-sizing: border-box;
 }
 .header-wrap .logo-img {
     max-width: 200px;
+    width: 100%;
     height: auto;
     display: block;
     margin: 0 auto 1rem;
 }
 .header-wrap h1 {
-    font-size: 2rem;
+    font-size: clamp(1.4rem, 4vw, 2rem);
     font-weight: 700;
     color: #1e3a5f;
     margin: 0 0 0.4rem 0;
-    letter-spacing: -0.5px;
+    letter-spacing: -0.3px;
+    word-break: break-word;
 }
 .header-wrap p {
-    font-size: 1.05rem;
+    font-size: clamp(0.85rem, 2.2vw, 1.05rem);
     color: #64748b;
     margin: 0;
+    padding: 0 0.5rem;
 }
 
-/* ---- white card ---- */
+/* ── white card ────────────────────────────────────────────── */
 .white-card {
     background: #ffffff;
     border-radius: 16px;
@@ -69,6 +79,8 @@ header {visibility: hidden;}
     padding: 1.8rem 2rem 2rem;
     margin-bottom: 1.8rem;
     border: 1px solid #e9edf2;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 .white-card h3 {
     font-size: 1.2rem;
@@ -80,7 +92,7 @@ header {visibility: hidden;}
     gap: 0.5rem;
 }
 
-/* ---- upload area ---- */
+/* ── upload area ───────────────────────────────────────────── */
 .stFileUploader > div {
     border: 2px dashed #d0d5dd !important;
     border-radius: 12px !important;
@@ -94,7 +106,7 @@ header {visibility: hidden;}
     background: #eff6ff !important;
 }
 
-/* ---- select boxes ---- */
+/* ── select boxes ──────────────────────────────────────────── */
 .stSelectbox > div > div {
     border-radius: 8px !important;
     border: 1px solid #d0d5dd !important;
@@ -104,7 +116,7 @@ header {visibility: hidden;}
     box-shadow: 0 0 0 3px rgba(37,99,235,0.12) !important;
 }
 
-/* ---- primary button ---- */
+/* ── primary button ────────────────────────────────────────── */
 .stButton > button[kind="primary"] {
     background: #2563eb !important;
     color: #fff !important;
@@ -112,7 +124,7 @@ header {visibility: hidden;}
     border-radius: 8px !important;
     padding: 0.7rem 1.5rem !important;
     font-weight: 600 !important;
-    font-size: 1rem !important;
+    font-size: clamp(0.85rem, 2vw, 1rem) !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
     transition: background 0.2s, transform 0.15s !important;
     width: 100% !important;
@@ -125,7 +137,7 @@ header {visibility: hidden;}
     transform: translateY(0) !important;
 }
 
-/* ---- progress bar ---- */
+/* ── progress bar ──────────────────────────────────────────── */
 .stProgress > div > div > div > div {
     background: linear-gradient(90deg, #2563eb, #60a5fa) !important;
 }
@@ -135,7 +147,7 @@ header {visibility: hidden;}
     border-radius: 999px !important;
 }
 
-/* ---- summary metrics ---- */
+/* ── summary metrics ───────────────────────────────────────── */
 .metric-grid {
     display: flex;
     gap: 1rem;
@@ -143,7 +155,7 @@ header {visibility: hidden;}
     flex-wrap: wrap;
 }
 .metric-card {
-    flex: 1;
+    flex: 1 1 calc(25% - 1rem);
     min-width: 120px;
     background: #fff;
     border-radius: 12px;
@@ -151,6 +163,7 @@ header {visibility: hidden;}
     padding: 1rem;
     text-align: center;
     border: 1px solid #e9edf2;
+    box-sizing: border-box;
 }
 .metric-card .metric-label {
     font-size: 0.75rem;
@@ -161,7 +174,7 @@ header {visibility: hidden;}
     margin-bottom: 0.25rem;
 }
 .metric-card .metric-value {
-    font-size: 1.8rem;
+    font-size: clamp(1.2rem, 4vw, 1.8rem);
     font-weight: 800;
 }
 .metric-card.metric-total .metric-value { color: #1e3a5f; }
@@ -169,15 +182,20 @@ header {visibility: hidden;}
 .metric-card.metric-risky .metric-value { color: #d97706; }
 .metric-card.metric-invalid .metric-value { color: #dc2626; }
 
-/* ---- results table ---- */
+/* ── results table wrapper (scroll on overflow) ────────────── */
+.table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 0.5rem;
+    border-radius: 10px;
+    border: 1px solid #e9edf2;
+}
 .results-table {
     width: 100%;
+    min-width: 700px;
     border-collapse: collapse;
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
-    border: 1px solid #e9edf2;
-    font-size: 0.88rem;
+    font-size: clamp(0.72rem, 1.6vw, 0.88rem);
 }
 .results-table thead {
     background: #eff6ff;
@@ -186,35 +204,37 @@ header {visibility: hidden;}
     font-weight: 600;
     color: #1e3a5f;
     text-align: left;
-    padding: 0.85rem 1rem;
+    padding: 0.85rem 0.9rem;
     border-bottom: 2px solid #dbeafe;
     white-space: nowrap;
 }
 .results-table td {
-    padding: 0.7rem 1rem;
+    padding: 0.7rem 0.9rem;
     border-bottom: 1px solid #f0f2f5;
     vertical-align: middle;
+    word-break: break-word;
 }
 .results-table tbody tr:hover {
     background: #f8fafc;
 }
 
-/* ---- status badges ---- */
+/* ── status badges ─────────────────────────────────────────── */
 .sbadge {
     display: inline-block;
-    padding: 0.2rem 0.7rem;
+    padding: 0.2rem 0.6rem;
     border-radius: 999px;
-    font-size: 0.78rem;
+    font-size: clamp(0.65rem, 1.4vw, 0.78rem);
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
 }
 .sbadge-verified { background: #dcfce7; color: #166534; }
 .sbadge-risky    { background: #fef3c7; color: #92400e; }
 .sbadge-invalid  { background: #fee2e2; color: #991b1b; }
 .sbadge-nomx     { background: #f1f5f9; color: #475569; }
 
-/* ---- download buttons ---- */
+/* ── download buttons ──────────────────────────────────────── */
 .dl-wrap {
     display: flex;
     gap: 1rem;
@@ -224,7 +244,7 @@ header {visibility: hidden;}
     border-radius: 8px !important;
     font-weight: 600 !important;
     padding: 0.65rem 1.2rem !important;
-    font-size: 0.9rem !important;
+    font-size: clamp(0.8rem, 1.8vw, 0.9rem) !important;
     border: 1px solid #d0d5dd !important;
     background: #fff !important;
     color: #1e3a5f !important;
@@ -236,34 +256,75 @@ header {visibility: hidden;}
     background: #eff6ff !important;
 }
 
-/* ---- empty state ---- */
+/* ── empty state ───────────────────────────────────────────── */
 .empty-state {
     text-align: center;
-    padding: 3rem 0 1.5rem;
+    padding: 3rem 0.5rem 1.5rem;
 }
-.empty-state .icon { font-size: 3.5rem; opacity: 0.4; margin-bottom: 0.8rem; }
-.empty-state h2 { font-size: 1.4rem; font-weight: 600; color: #1e3a5f; margin: 0 0 0.5rem; }
-.empty-state p  { font-size: 1rem; color: #64748b; margin: 0; }
+.empty-state .icon { font-size: clamp(2.5rem, 8vw, 3.5rem); opacity: 0.4; margin-bottom: 0.8rem; }
+.empty-state h2 { font-size: clamp(1.1rem, 3vw, 1.4rem); font-weight: 600; color: #1e3a5f; margin: 0 0 0.5rem; }
+.empty-state p  { font-size: clamp(0.85rem, 2vw, 1rem); color: #64748b; margin: 0; }
 
-/* ---- processing text ---- */
+/* ── processing text ───────────────────────────────────────── */
 .proc-text {
-    font-size: 0.95rem;
+    font-size: clamp(0.8rem, 1.8vw, 0.95rem);
     color: #64748b;
     margin: 0.5rem 0;
     min-height: 1.5rem;
 }
 
-/* ---- responsive ---- */
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── tablets & small laptops (≤1024px) ─────────────────────── */
+@media (max-width: 1024px) {
+    .white-card { padding: 1.5rem; }
+    .metric-card { flex: 1 1 calc(50% - 1rem); }
+    .results-table { min-width: 600px; }
+}
+
+/* ── tablets (≤768px) ──────────────────────────────────────── */
 @media (max-width: 768px) {
-    .header-wrap h1 { font-size: 1.6rem; }
+    .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+    .header-wrap { margin-bottom: 1.2rem; }
+    .header-wrap .logo-img { max-width: 140px; }
     .white-card { padding: 1.2rem 1rem; }
-    .metric-grid { gap: 0.6rem; }
-    .metric-card { min-width: 80px; padding: 0.7rem; }
-    .metric-card .metric-value { font-size: 1.35rem; }
+    .stFileUploader > div { padding: 1.2rem 0.8rem !important; }
+    .metric-card { flex: 1 1 calc(50% - 0.6rem); padding: 0.7rem; }
+    .metric-grid { gap: 0.6rem; margin-bottom: 1rem; }
     .dl-wrap { flex-direction: column; gap: 0.5rem; }
-    .results-table { font-size: 0.78rem; }
+    .results-table { min-width: 500px; }
     .results-table th,
-    .results-table td { padding: 0.5rem 0.6rem; }
+    .results-table td { padding: 0.55rem 0.6rem; }
+}
+
+/* ── phones (≤480px) ───────────────────────────────────────── */
+@media (max-width: 480px) {
+    .block-container { padding-top: 0.6rem !important; }
+    .header-wrap { margin-bottom: 1rem; }
+    .header-wrap .logo-img { max-width: 100px; margin-bottom: 0.6rem; }
+    .white-card { padding: 0.9rem 0.7rem; border-radius: 12px; }
+    .white-card h3 { font-size: 1rem; margin-bottom: 1rem; }
+    .stFileUploader > div { padding: 0.8rem 0.5rem !important; border-radius: 10px !important; }
+    .stButton > button[kind="primary"] { padding: 0.6rem 1rem !important; }
+    .metric-card { flex: 1 1 100%; padding: 0.6rem; }
+    .metric-card .metric-value { font-size: 1.3rem; }
+    .results-table { min-width: 420px; font-size: 0.7rem; }
+    .results-table th,
+    .results-table td { padding: 0.4rem 0.5rem; }
+    .sbadge { font-size: 0.6rem; padding: 0.15rem 0.45rem; }
+    .dl-wrap .stDownloadButton > button { padding: 0.55rem 1rem !important; font-size: 0.8rem !important; }
+    .empty-state { padding: 2rem 0.5rem 1rem; }
+}
+
+/* ── very small screens (≤360px) ───────────────────────────── */
+@media (max-width: 360px) {
+    .block-container { padding-left: 0.3rem !important; padding-right: 0.3rem !important; }
+    .white-card { padding: 0.7rem 0.5rem; }
+    .results-table { min-width: 320px; font-size: 0.65rem; }
+    .results-table th,
+    .results-table td { padding: 0.3rem 0.4rem; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -442,7 +503,7 @@ def main():
             index=False,
             table_id="tbl",
         )
-        st.markdown(html, unsafe_allow_html=True)
+        st.markdown(f'<div class="table-wrap">{html}</div>', unsafe_allow_html=True)
 
         # download buttons
         st.markdown('<div class="dl-wrap">', unsafe_allow_html=True)
