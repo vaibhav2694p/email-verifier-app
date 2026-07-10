@@ -25,6 +25,96 @@ ANTI_VERIFY_PATTERN = re.compile(
 
 _smtp_cache = TTLCache(default_ttl=1800)
 
+_port_25_cache: Dict[str, bool] = {}
+
+
+def check_port_25_available(host: str, timeout: int = 3) -> bool:
+    cache_key = host
+    if cache_key in _port_25_cache:
+        return _port_25_cache[cache_key]
+
+    try:
+        sock = socket.create_connection((host, 25), timeout=timeout)
+        sock.close()
+        result = True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        result = False
+
+    _port_25_cache[cache_key] = result
+    return result
+
+
+def test_smtp_connection(
+    host: str,
+    port: int,
+    use_tls: bool = False,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    timeout: int = 5,
+) -> Dict:
+    start = time.monotonic()
+    info: Dict = {
+        "connected": False,
+        "host": host,
+        "port": port,
+        "banner": "",
+        "ehlo_supported": False,
+        "starttls_supported": False,
+        "authentication_required": False,
+        "response_time_ms": 0,
+        "error": "",
+    }
+
+    server: Optional[smtplib.SMTP] = None
+    try:
+        server = smtplib.SMTP(host=host, port=port, timeout=timeout)
+        server.settimeout(timeout)
+
+        banner = server.ehlo_resp
+        if isinstance(banner, bytes):
+            banner = banner.decode("utf-8", errors="replace")
+        info["banner"] = banner
+
+        code, msg = server.ehlo("test.example.com")
+        if code == 250:
+            info["ehlo_supported"] = True
+
+        ehlo_resp = server.ehlo_resp
+        if isinstance(ehlo_resp, bytes):
+            ehlo_resp = ehlo_resp.decode("utf-8", errors="replace")
+
+        info["starttls_supported"] = "STARTTLS" in ehlo_resp.upper()
+
+        if use_tls and info["starttls_supported"]:
+            server.starttls()
+            server.ehlo("test.example.com")
+
+        if username and password:
+            try:
+                server.login(username, password)
+            except smtplib.SMTPAuthenticationError:
+                info["authentication_required"] = True
+
+        info["connected"] = True
+
+    except Exception as e:
+        info["error"] = str(e)
+    finally:
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                try:
+                    server.close()
+                except Exception:
+                    pass
+
+    info["response_time_ms"] = (time.monotonic() - start) * 1000
+    return info
+
+
+test_smtp_connection.__test__ = False
+
 
 def verify_smtp(
     email: str,
@@ -34,17 +124,12 @@ def verify_smtp(
     verifier_email: Optional[str] = None,
     verifier_domain: Optional[str] = None,
 ) -> SmtpResult:
-    if not config.enable_smtp_check:
+    if not config.enable_smtp_check and config.smtp_verification_mode != "test":
         return SmtpResult(
             attempted=False,
             status=SmtpStatus.SMTP_DISABLED,
             error="SMTP check is disabled",
         )
-
-    cache_key = f"smtp:{email}:{mx_host}:{config.smtp_port}"
-    cached = _smtp_cache.get(cache_key)
-    if cached is not None:
-        return cached
 
     v_email = verifier_email or config.verifier_email
     v_domain = verifier_domain or config.verifier_domain
@@ -69,7 +154,7 @@ def verify_smtp(
 
         ehlo_ok, ehlo_msg = _smtp_ehlo(server, v_domain, config.smtp_response_timeout)
         if not ehlo_ok:
-            result = SmtpResult(
+            return SmtpResult(
                 attempted=True,
                 status=SmtpStatus.CONNECTION_BLOCKED,
                 mx_host=mx_host,
@@ -77,12 +162,10 @@ def verify_smtp(
                 response_time_ms=(time.monotonic() - start) * 1000,
                 error=f"EHLO failed: {ehlo_msg}",
             )
-            _smtp_cache.set(cache_key, result, ttl=config.smtp_cache_ttl)
-            return result
 
         mail_ok, mail_msg = _smtp_mail_from(server, v_email, config.smtp_response_timeout)
         if not mail_ok:
-            result = SmtpResult(
+            return SmtpResult(
                 attempted=True,
                 status=SmtpStatus.CONNECTION_BLOCKED,
                 mx_host=mx_host,
@@ -90,9 +173,9 @@ def verify_smtp(
                 response_time_ms=(time.monotonic() - start) * 1000,
                 error=f"MAIL FROM failed: {mail_msg}",
             )
-            _smtp_cache.set(cache_key, result, ttl=config.smtp_cache_ttl)
-            return result
 
+        # SAFETY: Never send DATA command. The verification protocol is:
+        # EHLO -> MAIL FROM -> RCPT TO -> QUIT (never DATA).
         code, msg = _smtp_rcpt_to(server, email, config.smtp_response_timeout)
         status = _classify_smtp_response(code, msg)
 
@@ -105,7 +188,6 @@ def verify_smtp(
             port=config.smtp_port,
             response_time_ms=(time.monotonic() - start) * 1000,
         )
-        _smtp_cache.set(cache_key, result, ttl=config.smtp_cache_ttl)
         return result
 
     except smtplib.SMTPConnectError as e:
@@ -210,6 +292,8 @@ def _smtp_mail_from(server: smtplib.SMTP, email: str, timeout: int) -> Tuple[boo
 
 
 def _smtp_rcpt_to(server: smtplib.SMTP, email: str, timeout: int) -> Tuple[int, str]:
+    # SAFETY: This function must NEVER issue a DATA command.
+    # The verification protocol is: EHLO -> MAIL FROM -> RCPT TO -> QUIT.
     try:
         code, msg = server.rcpt(email)
         decoded = msg.decode("utf-8", errors="replace") if isinstance(msg, bytes) else str(msg)
@@ -239,11 +323,31 @@ def verify_smtp_for_domain(
     mx_records: List[Dict],
     config: VerifierConfig,
 ) -> SmtpResult:
+    if config.smtp_test_mode or config.smtp_verification_mode == "test":
+        test_host = config.test_smtp_host
+        test_port = config.test_smtp_port
+        logger.debug("Test mode: connecting to %s:%d", test_host, test_port)
+        result = verify_smtp(
+            email=email,
+            domain=domain,
+            mx_host=test_host,
+            config=config,
+        )
+        return result
+
     if not config.enable_smtp_check:
         return SmtpResult(
             attempted=False,
             status=SmtpStatus.SMTP_DISABLED,
             error="SMTP check is disabled",
+        )
+
+    if not check_port_25_available("mx1." + domain):
+        logger.debug("Port 25 appears blocked for domain %s", domain)
+        return SmtpResult(
+            attempted=True,
+            status=SmtpStatus.CONNECTION_BLOCKED,
+            error="Port 25 is blocked",
         )
 
     if not mx_records:

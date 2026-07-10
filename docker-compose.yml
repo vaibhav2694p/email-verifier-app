@@ -1,26 +1,38 @@
-version: '3.8'
-
 services:
   email-verifier:
     build: .
     ports:
       - "8501:8501"
     environment:
-      - ENABLE_SMTP_CHECK=false
-      - SMTP_PORT=25
-      - SMTP_CONNECTION_TIMEOUT=5
-      - SMTP_RESPONSE_TIMEOUT=5
-      - MAX_WORKERS=10
-      - BATCH_SIZE=100
-      - DNS_TIMEOUT=5
-      - LOG_LEVEL=INFO
+      ENABLE_SMTP_CHECK: "false"
+      SMTP_TEST_MODE: "true"
+      TEST_SMTP_HOST: "mailpit"
+      TEST_SMTP_PORT: "1025"
+      TEST_SMTP_USE_TLS: "false"
+      TEST_SMTP_USERNAME: ""
+      TEST_SMTP_PASSWORD: ""
+      VERIFIER_EMAIL: "verifier@example.test"
+      VERIFIER_DOMAIN: "example.test"
+      MAX_WORKERS: "10"
+      BATCH_SIZE: "100"
+      DNS_TIMEOUT: "5"
+      LOG_LEVEL: "INFO"
     env_file:
       - .env
     volumes:
       - ./data:/app/data
+    depends_on:
+      - mailpit
     restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: 1G
           cpus: '2'
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"

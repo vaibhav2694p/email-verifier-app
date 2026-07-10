@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any, List
 from verifier.config import VerifierConfig
 from verifier.pipeline import VerificationPipeline
 from verifier.models import VerificationStatus, VerificationResult, PipelineStage
+from verifier.smtp_validator import check_port_25_available
 from services.bulk_processor import BulkProcessor
 from services.export_service import ExportService
 from services.summary_service import SummaryService
@@ -691,40 +692,7 @@ def main():
 def render_sidebar():
     st.markdown("### ⚙️ Configuration")
 
-    with st.expander("SMTP Settings", expanded=False):
-        enable_smtp = st.toggle(
-            "Enable SMTP Check",
-            value=st.session_state.config.enable_smtp_check,
-            help="SMTP verification checks if the mail server accepts the email",
-        )
-        st.session_state.config.enable_smtp_check = enable_smtp
-
-        if enable_smtp:
-            st.session_state.config.verifier_email = st.text_input(
-                "Verifier Email",
-                value=st.session_state.config.verifier_email,
-                placeholder="verifier@yourdomain.com",
-                help="An email address at a domain you control, used as the MAIL FROM in SMTP conversation",
-            )
-            st.session_state.config.verifier_domain = st.text_input(
-                "Verifier Domain",
-                value=st.session_state.config.verifier_domain,
-                placeholder="yourdomain.com",
-            )
-            col1, col2 = st.columns(2)
-            with col1:
-                st.session_state.config.smtp_port = st.number_input(
-                    "SMTP Port", min_value=1, max_value=65535,
-                    value=st.session_state.config.smtp_port,
-                )
-            with col2:
-                st.session_state.config.smtp_connection_timeout = st.number_input(
-                    "Timeout (s)", min_value=1, max_value=60,
-                    value=st.session_state.config.smtp_connection_timeout,
-                )
-
-    if not st.session_state.config.enable_smtp_check:
-        st.info("ℹ️ SMTP checks disabled. Enable for deeper verification.")
+    _render_smtp_config()
 
     # ── Cancel button during processing ──
     if st.session_state.processing:
@@ -758,6 +726,137 @@ def render_sidebar():
         "No email addresses are stored, logged, or shared with third parties. "
         "All results are cleared when you close or refresh this page."
     )
+
+
+def _render_smtp_config():
+    with st.expander("📧 SMTP Configuration", expanded=True):
+        config = st.session_state.config
+
+        mode = st.radio(
+            "Verification Mode",
+            options=["disabled", "test", "real"],
+            index=["disabled", "test", "real"].index(config.smtp_verification_mode),
+            horizontal=True,
+            help="disabled = no SMTP checks | test = Mailpit/local server | real = recipient MX probing",
+            key="smtp_mode_radio",
+        )
+        config.smtp_verification_mode = mode
+
+        if mode == "disabled":
+            config.enable_smtp_check = False
+            config.smtp_test_mode = False
+            st.info("SMTP checks are disabled. Only syntax, DNS, MX, and classification checks run.")
+
+        elif mode == "test":
+            config.enable_smtp_check = True
+            config.smtp_test_mode = True
+            st.success("Test mode: connects to local Mailpit or test SMTP server.")
+
+            with st.container():
+                config.test_smtp_host = st.text_input(
+                    "Test SMTP Host",
+                    value=config.test_smtp_host,
+                    key="test_smtp_host",
+                )
+                config.test_smtp_port = st.number_input(
+                    "Test SMTP Port",
+                    min_value=1, max_value=65535,
+                    value=config.test_smtp_port,
+                    key="test_smtp_port",
+                )
+                config.test_smtp_use_tls = st.toggle(
+                    "Use TLS",
+                    value=config.test_smtp_use_tls,
+                    key="test_smtp_tls",
+                )
+
+            st.caption("Mailpit web inbox: http://localhost:8025")
+
+            if st.button("🔌 Test SMTP Connection", use_container_width=True, key="btn_test_conn"):
+                _run_smtp_connection_test(config.test_smtp_host, config.test_smtp_port)
+
+        elif mode == "real":
+            config.enable_smtp_check = True
+            config.smtp_test_mode = False
+
+            st.warning("Real SMTP: connects to recipient MX servers on port 25. May be blocked.")
+
+            config.verifier_email = st.text_input(
+                "Verifier Email",
+                value=config.verifier_email,
+                placeholder="verifier@yourdomain.com",
+                help="MAIL FROM address for SMTP conversation",
+                key="v_email",
+            )
+            config.verifier_domain = st.text_input(
+                "Verifier Domain",
+                value=config.verifier_domain,
+                placeholder="yourdomain.com",
+                key="v_domain",
+            )
+
+            col1, col2 = st.columns(2)
+            with col1:
+                config.smtp_port = st.number_input(
+                    "SMTP Port", min_value=1, max_value=65535,
+                    value=config.smtp_port, key="smtp_port",
+                )
+            with col2:
+                config.smtp_connection_timeout = st.number_input(
+                    "Timeout (s)", min_value=1, max_value=60,
+                    value=config.smtp_connection_timeout, key="smtp_timeout",
+                )
+
+            # Port 25 status
+            port25_ok = check_port_25_available("gmail.com", timeout=3)
+            if port25_ok:
+                st.success("Port 25 is available on this network.")
+            else:
+                st.error("Port 25 is blocked. Real SMTP verification will not work.")
+
+            if st.button("🔌 Test SMTP Connection", use_container_width=True, key="btn_real_conn"):
+                if not config.verifier_email or not config.verifier_domain:
+                    st.error("Configure verifier email and domain first.")
+                else:
+                    _run_smtp_connection_test("aspmx.l.google.com", config.smtp_port)
+
+        # ── Status summary ──
+        st.markdown("---")
+        _render_smtp_status(config)
+
+
+def _run_smtp_connection_test(host: str, port: int):
+    with st.spinner(f"Testing connection to {host}:{port}..."):
+        try:
+            from verifier.smtp_validator import test_smtp_connection as _test_conn
+            result = _test_conn(host, port, False, timeout=5)
+            if result["connected"]:
+                st.success(f"Connected to {host}:{port} in {result['response_time_ms']:.0f}ms")
+                with st.expander("Connection Details"):
+                    st.json(result)
+            else:
+                st.error(f"Failed: {result.get('error', 'Unknown error')}")
+        except Exception as e:
+            st.error(f"Connection test failed: {e}")
+
+
+def _render_smtp_status(config):
+    st.markdown("**Status**")
+    status_items = [
+        ("SMTP Verification", "Enabled" if config.enable_smtp_check else "Disabled"),
+        ("Test Mode", "Enabled" if config.smtp_test_mode else "Disabled"),
+    ]
+    if config.smtp_test_mode:
+        status_items.append(("Test Host", f"{config.test_smtp_host}:{config.test_smtp_port}"))
+    if config.enable_smtp_check and not config.smtp_test_mode:
+        status_items.append(("Verifier Domain", config.verifier_domain or "Not configured"))
+        email_display = config.verifier_email
+        if email_display and "@" in email_display:
+            local, domain = email_display.split("@", 1)
+            email_display = local[:2] + "***@" + domain
+        status_items.append(("Verifier Email", email_display or "Not configured"))
+    for label, value in status_items:
+        st.caption(f"{label}: **{value}**")
 
 
 # ── Filters ────────────────────────────────────────────────────────────

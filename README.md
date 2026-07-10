@@ -6,7 +6,8 @@ A production-ready bulk email verification app built with Streamlit. Uses a 16-s
 
 - **Dual-tab UI** - Bulk verification (CSV/XLSX upload) and single-email lookup
 - **16-stage pipeline** - Syntax → Typo → DNS/MX → Provider → SMTP → Catch-All → Disposable → Role → Scoring
-- **SMTP mailbox probing** - EHLO/MAIL FROM/RCPT TO conversation with provider-specific overrides (Gmail, Outlook, Yahoo)
+- **Three SMTP modes** - Disabled, Test (Mailpit), and Real (recipient MX probing)
+- **SMTP mailbox probing** - EHLO/MAIL FROM/RCPT TO with provider-specific overrides
 - **Catch-all detection** - Probes random addresses to detect catch-all mail servers
 - **Domain typo detection** - Levenshtein + reverse-lookup correction suggestions
 - **IDN support** - Internationalized domain names with punycode conversion
@@ -15,6 +16,7 @@ A production-ready bulk email verification app built with Streamlit. Uses a 16-s
 - **TTL cache** - Thread-safe caching to avoid repeated DNS/SMTP probes
 - **Dashboard** - Real-time metrics, filters, and score breakdown
 - **Export** - CSV, multi-sheet Excel with domain summaries and statistics
+- **Mailpit integration** - Free local SMTP test server via Docker Compose
 
 ## Architecture
 
@@ -30,7 +32,7 @@ verifier/
   typo_detector.py              # Levenshtein + reverse-lookup
   dns_validator.py              # MX lookup with retry + TTL cache
   mx_provider.py                # Provider classification from MX records
-  smtp_validator.py             # SMTP EHLO/MAIL FROM/RCPT TO probing
+  smtp_validator.py             # SMTP probing (test mode + real MX)
   catch_all.py                  # Random-address catch-all detection
   disposable.py                 # Disposable domain detection
   role_detector.py              # Role-based address detection
@@ -44,13 +46,71 @@ data/
   public_domains.json           # Free domains + workspace MX patterns
   role_prefixes.json            # Role prefixes with risk adjustments
   domain_typos.json             # Common domain typos
+tests/
+  smtp_test_server.py           # Deterministic Python SMTP test server
+  test_smtp_validation.py       # SMTP tests including test mode
+  ...                           # 143 tests total
+```
+
+## SMTP Verification Modes
+
+| Mode | Description | Port 25 Required |
+|------|-------------|-----------------|
+| **Disabled** | No SMTP checks. Syntax, DNS, MX, classification only. | No |
+| **Test** | Connects to Mailpit or local test server. Safe for dev. | No |
+| **Real** | Connects directly to recipient MX servers (EHLO/MAIL FROM/RCPT TO). | Yes |
+
+**Safety**: The SMTP verifier never sends the `DATA` command. No emails are ever sent to the public internet during verification.
+
+### Mailpit (Test Mode)
+
+Mailpit is a free local SMTP test server. It captures all emails for inspection without sending them.
+
+**Docker Compose** (recommended):
+```bash
+docker compose up --build
+```
+- Streamlit app: http://localhost:8501
+- Mailpit inbox: http://localhost:8025
+
+**Standalone Docker**:
+```bash
+docker run --rm --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit
+```
+
+**Python-only** (no Docker):
+```bash
+streamlit run app.py
+# Then set SMTP mode to "Test" in the sidebar
+# Point to any SMTP server on port 1025
+```
+
+### Test Email Addresses (for test mode only)
+
+```
+accepted@example.test       -> SMTP 250
+rejected@example.test       -> SMTP 550
+temporary@example.test      -> SMTP 451
+greylisted@example.test     -> SMTP 450
+catchall@example.test       -> SMTP 250
+timeout@example.test        -> simulated timeout
+tlsrequired@example.test    -> SMTP 530
+```
+
+### SMTP Fallback Logic
+
+```
+Test mode enabled -> local Mailpit or test SMTP server
+Real mode enabled + port 25 available -> recipient MX servers
+Real mode enabled + port 25 blocked -> connection_blocked status
+SMTP disabled -> skip SMTP, continue with other checks
 ```
 
 ## Installation
 
 ```bash
-git clone https://github.com/vaibhav2694p/email-verifier-Streamlit-app.git
-cd email-verifier-Streamlit-app
+git clone https://github.com/vaibhav2694p/email-verifier-app.git
+cd email-verifier-app
 python -m venv .venv
 .venv\Scripts\activate        # Windows
 pip install -r requirements.txt
@@ -58,11 +118,26 @@ pip install -r requirements.txt
 
 Place your logo at `assets/safebooks_logo.png`.
 
-## Usage
+## Quick Start
+
+### With Docker (recommended)
 
 ```bash
+docker compose up --build
+```
+
+Open http://localhost:8501 for the app and http://localhost:8025 for Mailpit inbox.
+
+### Without Docker
+
+```bash
+cp .env.example .env          # optional, customize settings
 streamlit run app.py
 ```
+
+Set SMTP mode to "Test" in the sidebar and configure the test SMTP host/port.
+
+## Usage
 
 ### Bulk Verification
 1. Upload CSV/XLSX
@@ -75,6 +150,13 @@ streamlit run app.py
 2. Optionally enter company domain
 3. Click "Verify Email"
 4. View stage-by-stage analysis with score breakdown
+
+### SMTP Configuration (Sidebar)
+- Select verification mode: Disabled / Test / Real
+- In Test mode: configure Mailpit host/port
+- In Real mode: configure verifier email/domain, port, timeout
+- Click "Test SMTP Connection" to verify connectivity
+- Port 25 availability is checked automatically in Real mode
 
 ## Scoring
 
@@ -96,10 +178,26 @@ streamlit run app.py
 
 Status mapping: Valid (≥75), Likely Valid (≥50), Risky (≥30), Invalid (<30)
 
-## Docker
+## Environment Variables
 
-```bash
-docker compose up --build
+See `.env.example` for all configuration options. Key variables:
+
+```env
+# SMTP mode: disabled | test | real
+SMTP_VERIFICATION_MODE=disabled
+
+# Real MX probing
+ENABLE_SMTP_CHECK=false
+VERIFIER_EMAIL=verifier@company.com
+VERIFIER_DOMAIN=company.com
+
+# Test mode (Mailpit)
+SMTP_TEST_MODE=false
+TEST_SMTP_HOST=localhost
+TEST_SMTP_PORT=1025
+
+# Notifications (optional, admin only)
+NOTIFICATION_SMTP_ENABLED=false
 ```
 
 ## Testing
@@ -108,4 +206,12 @@ docker compose up --build
 .venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
-131 tests covering syntax, normalization, DNS, SMTP, catch-all, disposable, role detection, scoring, pipeline, bulk processing, export, and caching.
+143 tests covering syntax, normalization, DNS, SMTP (test mode + real), catch-all, disposable, role detection, scoring, pipeline, bulk processing, export, and caching.
+
+## Production Safety
+
+- Keep `SMTP_TEST_MODE=false` in production
+- Keep `ENABLE_SMTP_CHECK=false` unless port 25 is available and use is authorized
+- Never expose port 1025 or Mailpit inbox publicly
+- Never commit `.env` or SMTP credentials
+- Never use verification to send unsolicited messages

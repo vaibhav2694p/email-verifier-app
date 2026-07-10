@@ -27,6 +27,27 @@ class VerifierConfig:
     max_retries: int = 2
     request_timeout: int = 30
 
+    # Test mode / local SMTP server
+    smtp_test_mode: bool = False
+    test_smtp_host: str = "localhost"
+    test_smtp_port: int = 1025
+    test_smtp_use_tls: bool = False
+    test_smtp_username: str = ""
+    test_smtp_password: str = ""
+    smtp_verification_mode: str = "disabled"  # disabled | test | real
+    domain_rate_limit: int = 2
+
+    # Notification SMTP
+    notification_smtp_enabled: bool = False
+    notification_smtp_host: str = ""
+    notification_smtp_port: int = 587
+    notification_smtp_username: str = ""
+    notification_smtp_password: str = ""
+    notification_smtp_use_tls: bool = True
+    notification_from_email: str = ""
+    notification_to_email: str = ""
+    mailpit_web_url: str = "http://localhost:8025"
+
     @classmethod
     def from_env(cls) -> "VerifierConfig":
         return cls(
@@ -45,4 +66,21 @@ class VerifierConfig:
             catch_all_cache_ttl=int(os.getenv("CATCH_ALL_CACHE_TTL", "86400")),
             custom_dns_server=os.getenv("CUSTOM_DNS_SERVER", ""),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
+            smtp_test_mode=os.getenv("SMTP_TEST_MODE", "false").lower() == "true",
+            test_smtp_host=os.getenv("TEST_SMTP_HOST", "localhost"),
+            test_smtp_port=int(os.getenv("TEST_SMTP_PORT", "1025")),
+            test_smtp_use_tls=os.getenv("TEST_SMTP_USE_TLS", "false").lower() == "true",
+            test_smtp_username=os.getenv("TEST_SMTP_USERNAME", ""),
+            test_smtp_password=os.getenv("TEST_SMTP_PASSWORD", ""),
+            smtp_verification_mode=os.getenv("SMTP_VERIFICATION_MODE", "disabled"),
+            domain_rate_limit=int(os.getenv("SMTP_DOMAIN_RATE_LIMIT", "2")),
+            notification_smtp_enabled=os.getenv("NOTIFICATION_SMTP_ENABLED", "false").lower() == "true",
+            notification_smtp_host=os.getenv("NOTIFICATION_SMTP_HOST", ""),
+            notification_smtp_port=int(os.getenv("NOTIFICATION_SMTP_PORT", "587")),
+            notification_smtp_username=os.getenv("NOTIFICATION_SMTP_USERNAME", ""),
+            notification_smtp_password=os.getenv("NOTIFICATION_SMTP_PASSWORD", ""),
+            notification_smtp_use_tls=os.getenv("NOTIFICATION_SMTP_USE_TLS", "true").lower() == "true",
+            notification_from_email=os.getenv("NOTIFICATION_FROM_EMAIL", ""),
+            notification_to_email=os.getenv("NOTIFICATION_TO_EMAIL", ""),
+            mailpit_web_url=os.getenv("MAILPIT_WEB_URL", "http://localhost:8025"),
         )
