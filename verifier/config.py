@@ -4,9 +4,16 @@ from dataclasses import dataclass
 
 @dataclass
 class VerifierConfig:
+    # Gmail Workspace SMTP configuration (from .env)
+    smtp_real_host: str = "smtp.gmail.com"
+    smtp_real_port: int = 587
+    smtp_real_username: str = "vaibhav2694p@gmail.com"
+    smtp_real_password: str = "apasswordforyourgmail"
+    smtp_real_use_tls: bool = True
+
     # Standard verification configuration
-    verifier_email: str = "audrey.watson@safebooksglobalau.com"
-    verifier_domain: str = "safebooksglobalau.com"
+    verifier_email: str = "vaibhav2694p@gmail.com"
+    verifier_domain: str = "gmail.com"
     enable_smtp_check: bool = True
     smtp_port: int = 25
     smtp_connection_timeout: int = 5
