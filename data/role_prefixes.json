@@ -1,0 +1,101 @@
+{
+  "role_prefixes": {
+    "administrative": [
+      "admin",
+      "administrator",
+      "webmaster",
+      "sysadmin",
+      "root",
+      "hostmaster",
+      "postmaster",
+      "abuse",
+      "security",
+      "privacy",
+      "legal"
+    ],
+    "contact": [
+      "info",
+      "contact",
+      "hello",
+      "help",
+      "support",
+      "service",
+      "enquiry",
+      "enquiries",
+      "feedback"
+    ],
+    "sales": [
+      "sales",
+      "billing",
+      "accounts",
+      "accountspayable",
+      "accountsreceivable",
+      "invoice"
+    ],
+    "hr": [
+      "hr",
+      "humanresources",
+      "careers",
+      "jobs",
+      "recruitment",
+      "recruiting"
+    ],
+    "marketing": [
+      "marketing",
+      "pr",
+      "press",
+      "media",
+      "advertising",
+      "promo",
+      "promotions"
+    ],
+    "technical": [
+      "webmaster",
+      "devnull",
+      "spam",
+      "junk",
+      "bounce",
+      "mailerdaemon",
+      "mailer-daemon",
+      "nobody",
+      "daemon"
+    ],
+    "department": [
+      "finance",
+      "accounting",
+      "legal",
+      "compliance",
+      "operations",
+      "logistics",
+      "procurement"
+    ],
+    "notifications": [
+      "noreply",
+      "no-reply",
+      "donotreply",
+      "do-not-reply",
+      "notifications",
+      "notify",
+      "alerts",
+      "updates",
+      "newsletter"
+    ],
+    "departments": [
+      "office",
+      "reception",
+      "frontdesk",
+      "switchboard"
+    ]
+  },
+  "role_risk_adjustment": {
+    "administrative": -10,
+    "contact": -5,
+    "sales": -5,
+    "hr": -5,
+    "marketing": -10,
+    "technical": -15,
+    "department": -5,
+    "notifications": -15,
+    "departments": -5
+  }
+}

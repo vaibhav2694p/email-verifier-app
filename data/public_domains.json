@@ -1,0 +1,133 @@
+{
+  "free_domains": [
+    "gmail.com",
+    "yahoo.com",
+    "outlook.com",
+    "hotmail.com",
+    "aol.com",
+    "icloud.com",
+    "proton.me",
+    "protonmail.com",
+    "live.com",
+    "msn.com",
+    "yahoo.co.uk",
+    "yahoo.ca",
+    "ymail.com",
+    "rocketmail.com",
+    "mail.com",
+    "zoho.com",
+    "zohomail.com",
+    "fastmail.com",
+    "tutanota.com",
+    "tutamail.com",
+    "gmx.com",
+    "gmx.net",
+    "yandex.com",
+    "yandex.ru",
+    "mail.ru",
+    "inbox.com",
+    "inbox.ru",
+    "rambler.ru",
+    "comcast.net",
+    "verizon.net",
+    "att.net",
+    "sbcglobal.net",
+    "cox.net",
+    "charter.net",
+    "bellsouth.net",
+    "earthlink.net",
+    "juno.com",
+    "netscape.net",
+    "rediffmail.com",
+    "sify.com",
+    "lycos.com",
+    "excite.com",
+    "alice.it",
+    "tin.it",
+    "libero.it",
+    "virgilio.it",
+    "t-online.de",
+    "arcor.de",
+    "web.de",
+    "freenet.de",
+    "gmx.de",
+    "tiscali.it",
+    "wanadoo.fr",
+    "free.fr",
+    "laposte.net",
+    "orange.fr",
+    "sfr.fr",
+    "voila.fr",
+    "daum.net",
+    "hanmail.net",
+    "naver.com",
+    "nate.com",
+    "mail2world.com",
+    "runbox.com",
+    "hushmail.com",
+    "lavabit.com",
+    "secureserver.net"
+  ],
+  "workspace_providers": {
+    "google": {
+      "mx_patterns": [
+        "google.com",
+        "googlemail.com",
+        "aspmx.l.google.com",
+        "gmail-smtp-in.l.google.com"
+      ],
+      "workspace_mx": [
+        "aspmx.l.google.com",
+        "alt1.aspmx.l.google.com",
+        "alt2.aspmx.l.google.com",
+        "alt3.aspmx.l.google.com",
+        "alt4.aspmx.l.google.com"
+      ]
+    },
+    "microsoft": {
+      "mx_patterns": [
+        "outlook.com",
+        "protection.outlook.com",
+        "office365.com",
+        "microsoft.com",
+        "microsoftonline.com"
+      ],
+      "workspace_mx": [
+        "*.outlook.com",
+        "*.protection.outlook.com"
+      ]
+    },
+    "zoho": {
+      "mx_patterns": [
+        "zoho.com",
+        "zohomail.com"
+      ],
+      "mx_hosts": [
+        "mx.zoho.com",
+        "mx2.zoho.com",
+        "mx3.zoho.com"
+      ]
+    },
+    "fastmail": {
+      "mx_patterns": [
+        "fastmail.com",
+        "messagingengine.com"
+      ],
+      "mx_hosts": [
+        "in1.smtp.messagingengine.com",
+        "in2.smtp.messagingengine.com"
+      ]
+    },
+    "yandex": {
+      "mx_patterns": [
+        "yandex.net",
+        "yandex.ru",
+        "ya.ru"
+      ],
+      "mx_hosts": [
+        "mx.yandex.ru",
+        "mx2.yandex.ru"
+      ]
+    }
+  }
+}
