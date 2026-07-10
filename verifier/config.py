@@ -75,6 +75,13 @@ class VerifierConfig:
 
     @classmethod
     def from_env(cls) -> "VerifierConfig":
+        smtp_mode = os.getenv("SMTP_VERIFICATION_MODE", "real")
+        smtp_enabled = os.getenv("ENABLE_SMTP_CHECK", "true").lower() == "true"
+        
+        # If SMTP is disabled, set mode to disabled regardless of mode setting
+        if not smtp_enabled:
+            smtp_mode = "disabled"
+        
         return cls(
             smtp_real_host=os.getenv("GMAIL_SMTP_HOST", "smtp.gmail.com"),
             smtp_real_port=int(os.getenv("GMAIL_SMTP_PORT", "587")),
@@ -83,7 +90,7 @@ class VerifierConfig:
             smtp_real_use_tls=os.getenv("GMAIL_SMTP_USE_TLS", "true").lower() == "true",
             verifier_email=os.getenv("GMAIL_SMTP_USERNAME", "vaibhav2694p@gmail.com"),
             verifier_domain=os.getenv("VERIFIER_DOMAIN", "gmail.com"),
-            enable_smtp_check=os.getenv("ENABLE_SMTP_CHECK", "true").lower() == "true",
+            enable_smtp_check=smtp_enabled,
             smtp_port=int(os.getenv("SMTP_PORT", "25")),
             smtp_connection_timeout=int(os.getenv("SMTP_CONNECTION_TIMEOUT", "5")),
             smtp_response_timeout=int(os.getenv("SMTP_RESPONSE_TIMEOUT", "5")),
@@ -102,7 +109,7 @@ class VerifierConfig:
             test_smtp_use_tls=os.getenv("TEST_SMTP_USE_TLS", "false").lower() == "true",
             test_smtp_username=os.getenv("TEST_SMTP_USERNAME", ""),
             test_smtp_password=os.getenv("TEST_SMTP_PASSWORD", ""),
-            smtp_verification_mode=os.getenv("SMTP_VERIFICATION_MODE", "real"),
+            smtp_verification_mode=smtp_mode,
             domain_rate_limit=int(os.getenv("SMTP_DOMAIN_RATE_LIMIT", "2")),
             notification_smtp_enabled=os.getenv("NOTIFICATION_SMTP_ENABLED", "false").lower() == "true",
             notification_smtp_host=os.getenv("NOTIFICATION_SMTP_HOST", ""),
