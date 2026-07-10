@@ -124,7 +124,7 @@ def verify_smtp(
     verifier_email: Optional[str] = None,
     verifier_domain: Optional[str] = None,
 ) -> SmtpResult:
-    if not config.enable_smtp_check and config.smtp_verification_mode != "test":
+    if config.smtp_verification_mode == "disabled":
         return SmtpResult(
             attempted=False,
             status=SmtpStatus.SMTP_DISABLED,
@@ -141,16 +141,31 @@ def verify_smtp(
             error="Verifier email/domain not configured",
         )
 
+    # Use real SMTP credentials for production verification
+    if config.smtp_verification_mode == "real" and config.smtp_real_host:
+        mx_host = config.smtp_real_host
+        port = config.smtp_real_port
+        smtp_username = config.smtp_real_username
+        smtp_password = config.smtp_real_password
+        use_tls = config.smtp_real_use_tls
+    elif config.smtp_verification_mode == "test" and config.smtp_test_mode:
+        mx_host = config.test_smtp_host
+        port = config.test_smtp_port
+        smtp_username = config.test_smtp_username
+        smtp_password = config.test_smtp_password
+        use_tls = config.test_smtp_use_tls
+    else:
+        port = config.smtp_port
+
     start = time.monotonic()
     server = None
 
     try:
         server = smtplib.SMTP(
             host=mx_host,
-            port=config.smtp_port,
-            timeout=config.smtp_connection_timeout,
+            port=port,
+            timeout=config.smtp_response_timeout,
         )
-        server.settimeout(config.smtp_response_timeout)
 
         ehlo_ok, ehlo_msg = _smtp_ehlo(server, v_domain, config.smtp_response_timeout)
         if not ehlo_ok:

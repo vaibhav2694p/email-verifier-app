@@ -4,27 +4,14 @@ from dataclasses import dataclass
 
 @dataclass
 class VerifierConfig:
-    verifier_email: str = ""
-    verifier_domain: str = ""
-    enable_smtp_check: bool = False
+    # Standard verification configuration
+    verifier_email: str = "audrey.watson@safebooksglobalau.com"
+    verifier_domain: str = "safebooksglobalau.com"
+    enable_smtp_check: bool = True
     smtp_port: int = 25
     smtp_connection_timeout: int = 5
     smtp_response_timeout: int = 5
     smtp_max_attempts: int = 2
-    max_workers: int = 10
-    batch_size: int = 100
-    dns_timeout: int = 5
-    dns_cache_ttl: int = 3600
-    smtp_cache_ttl: int = 1800
-    catch_all_cache_ttl: int = 86400
-    custom_dns_server: str = ""
-    log_level: str = "INFO"
-    max_upload_size_mb: int = 50
-    max_rows: int = 100000
-    max_concurrent_smtp: int = 5
-    per_domain_smtp_rate_limit: int = 10
-    max_retries: int = 2
-    request_timeout: int = 30
 
     # Test mode / local SMTP server
     smtp_test_mode: bool = False
@@ -33,7 +20,22 @@ class VerifierConfig:
     test_smtp_use_tls: bool = False
     test_smtp_username: str = ""
     test_smtp_password: str = ""
-    smtp_verification_mode: str = "disabled"  # disabled | test | real
+    smtp_verification_mode: str = "real"  # disabled | test | real
+
+    # Processor settings
+    max_workers: int = 10
+    batch_size: int = 100
+    dns_timeout: int = 5
+    dns_cache_ttl: int = 3600
+    smtp_cache_ttl: int = 1800
+    catch_all_cache_ttl: int = 86400
+    max_upload_size_mb: int = 50
+    max_rows: int = 100000
+    max_concurrent_smtp: int = 5
+    per_domain_smtp_rate_limit: int = 10
+    max_retries: int = 2
+    request_timeout: int = 30
+    log_level: str = "INFO"
     domain_rate_limit: int = 2
 
     # Notification SMTP
@@ -64,8 +66,8 @@ class VerifierConfig:
     @classmethod
     def from_env(cls) -> "VerifierConfig":
         return cls(
-            verifier_email=os.getenv("VERIFIER_EMAIL", ""),
-            verifier_domain=os.getenv("VERIFIER_DOMAIN", ""),
+            verifier_email=os.getenv("VERIFIER_EMAIL", "audrey.watson@safebooksglobalau.com"),
+            verifier_domain=os.getenv("VERIFIER_DOMAIN", "safebooksglobalau.com"),
             enable_smtp_check=os.getenv("ENABLE_SMTP_CHECK", "false").lower() == "true",
             smtp_port=int(os.getenv("SMTP_PORT", "25")),
             smtp_connection_timeout=int(os.getenv("SMTP_CONNECTION_TIMEOUT", "5")),
@@ -85,7 +87,7 @@ class VerifierConfig:
             test_smtp_use_tls=os.getenv("TEST_SMTP_USE_TLS", "false").lower() == "true",
             test_smtp_username=os.getenv("TEST_SMTP_USERNAME", ""),
             test_smtp_password=os.getenv("TEST_SMTP_PASSWORD", ""),
-            smtp_verification_mode=os.getenv("SMTP_VERIFICATION_MODE", "disabled"),
+            smtp_verification_mode=os.getenv("SMTP_VERIFICATION_MODE", "test"),
             domain_rate_limit=int(os.getenv("SMTP_DOMAIN_RATE_LIMIT", "2")),
             notification_smtp_enabled=os.getenv("NOTIFICATION_SMTP_ENABLED", "false").lower() == "true",
             notification_smtp_host=os.getenv("NOTIFICATION_SMTP_HOST", ""),
