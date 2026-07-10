@@ -986,19 +986,17 @@ def _run_bulk_verification():
         st.session_state.processing = False
         return
 
-    progress_bar = st.progress(0)
+    progress_bar = st.progress(0, text="Starting verification...")
     status_text = st.empty()
 
     def progress_callback(processed: int, total: int, extra: dict):
-        if st.session_state.cancelled:
-            return
-        pct = processed / total if total > 0 else 0
-        progress_bar.progress(min(pct, 1.0))
-        status_text.markdown(
-            f'<p class="proc-text">Processed {processed} of {total} emails &mdash; '
-            f'{processed/total*100:.0f}%</p>',
-            unsafe_allow_html=True,
-        )
+        try:
+            if st.session_state.get("cancelled"):
+                return
+            pct = processed / total if total > 0 else 0
+            progress_bar.progress(min(pct, 1.0), text=f"Verified {processed} of {total} emails ({processed/total*100:.0f}%)")
+        except Exception:
+            pass
 
     config = st.session_state.config
     processor = BulkProcessor(config=config, progress_callback=progress_callback)
@@ -1007,6 +1005,7 @@ def _run_bulk_verification():
         result_df = processor.process(df, email_col, company_col)
         st.session_state.results_df = result_df
         st.session_state.filtered_df = result_df
+        progress_bar.progress(1.0, text="Done!")
     except Exception as e:
         st.error(f"Processing error: {e}")
         st.error(traceback.format_exc())
