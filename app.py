@@ -14,6 +14,12 @@ from verifier.smtp_validator import check_port_25_available
 from services.bulk_processor import BulkProcessor
 from services.export_service import ExportService
 from services.summary_service import SummaryService
+from enrichment.models import PersonProfile, CompanyProfile, EnrichmentResult
+from enrichment.company_lookup import lookup_company
+from enrichment.person_lookup import lookup_person
+from enrichment.profile_matcher import match_profiles, build_company_summary
+from enrichment.summary import generate_summary as generate_enrichment_summary
+from enrichment.cache import EnrichmentCache
 
 
 
@@ -679,13 +685,16 @@ def main():
         render_sidebar()
 
     render_logo()
-    tab1, tab2 = st.tabs(["📊 Bulk Verification", "📧 Single Email"])
+    tab1, tab2, tab3 = st.tabs(["📊 Bulk Verification", "📧 Single Email", "🔍 Email Intelligence"])
 
     with tab1:
         render_bulk_verification()
 
     with tab2:
         render_single_verification()
+
+    with tab3:
+        render_email_intelligence()
 
 
 # ── Sidebar ────────────────────────────────────────────────────────────
@@ -823,6 +832,20 @@ def _render_smtp_config():
         # ── Status summary ──
         st.markdown("---")
         _render_smtp_status(config)
+
+    st.markdown("---")
+    with st.expander("🔍 Enrichment", expanded=False):
+        enrichment_enabled = st.toggle(
+            "Enable Email Enrichment",
+            value=st.session_state.get("enrichment_enabled", False),
+            help="Search public sources for person and company info during bulk verification",
+            key="enrichment_toggle",
+        )
+        st.session_state.enrichment_enabled = enrichment_enabled
+        if enrichment_enabled:
+            st.info("Enrichment adds public profile data to verification results. Processing may be slower.")
+        else:
+            st.caption("Enrichment disabled. Enable to add person/company data during bulk verification.")
 
 
 def _run_smtp_connection_test(host: str, port: int):
@@ -1098,7 +1121,8 @@ def _run_bulk_verification():
             pass
 
     config = st.session_state.config
-    processor = BulkProcessor(config=config, progress_callback=progress_callback)
+    enrichment_enabled = st.session_state.get("enrichment_enabled", False)
+    processor = BulkProcessor(config=config, progress_callback=progress_callback, enrichment_enabled=enrichment_enabled)
 
     try:
         result_df = processor.process(df, email_col, company_col)
@@ -1268,6 +1292,205 @@ def render_single_verification():
     if st.session_state.single_result is not None:
         result = st.session_state.single_result
         _display_single_result(result)
+
+
+# ── Email Intelligence Tab ────────────────────────────────────────────
+def render_email_intelligence():
+    st.markdown('<div class="white-card">', unsafe_allow_html=True)
+    st.markdown("<h3>🔍 Email Intelligence</h3>", unsafe_allow_html=True)
+    st.caption("Search publicly available information to enrich email addresses. No private data is accessed.")
+
+    email_input = st.text_input(
+        "Email Address",
+        placeholder="vaibhav@safebooksglobal.com",
+        key="intel_email",
+        help="Enter an email address to search for publicly available information",
+    )
+
+    if st.button("🔍 Look Up Email", type="primary", use_container_width=True, key="btn_intel"):
+        if not email_input or not email_input.strip():
+            st.warning("Please enter an email address.")
+            return
+
+        with st.spinner("Searching public sources..."):
+            try:
+                result = _run_enrichment(email_input.strip())
+                st.session_state.intel_result = result
+            except Exception as e:
+                st.error(f"Enrichment error: {e}")
+                st.error(traceback.format_exc())
+                return
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if "intel_result" in st.session_state and st.session_state.intel_result is not None:
+        _display_intel_result(st.session_state.intel_result)
+
+
+def _run_enrichment(email: str) -> EnrichmentResult:
+    """Run the full enrichment pipeline for a single email."""
+    import time
+    start = time.monotonic()
+    result = EnrichmentResult(email=email)
+
+    local_part = email.split("@")[0] if "@" in email else ""
+    domain = email.split("@")[1] if "@" in email else ""
+
+    # Step 1: Extract name from email
+    from enrichment.search_engine import extract_name_from_email
+    first_name, last_name = extract_name_from_email(local_part)
+
+    # Step 2: Look up company
+    company = None
+    if domain:
+        try:
+            company = lookup_company(domain)
+        except Exception as e:
+            st.warning(f"Company lookup error: {e}")
+
+    # Step 3: Look up person
+    person = None
+    try:
+        person = lookup_person(email, company_profile=company)
+    except Exception as e:
+        st.warning(f"Person lookup error: {e}")
+
+    # Step 4: Generate summary
+    ai_summary = ""
+    try:
+        ai_summary = generate_enrichment_summary(person, company)
+    except Exception:
+        pass
+
+    result.person = person
+    result.company = company
+    result.ai_summary = ai_summary
+    result.enriched = bool(person or company)
+    result.processing_time_ms = round((time.monotonic() - start) * 1000, 2)
+
+    return result
+
+
+def _display_intel_result(result: EnrichmentResult):
+    """Display enrichment results in the Streamlit UI."""
+    st.markdown('<div class="white-card">', unsafe_allow_html=True)
+    st.markdown("<h3>📋 Intelligence Results</h3>", unsafe_allow_html=True)
+
+    # ── Step 1: Email Parsing ──
+    local_part = result.email.split("@")[0] if "@" in result.email else ""
+    domain = result.email.split("@")[1] if "@" in result.email else ""
+    st.markdown("**Email Parsing:**")
+    parse_html = f"""
+    <table class="results-table">
+    <tr><td><strong>Email</strong></td><td>{result.email}</td></tr>
+    <tr><td><strong>Local Part</strong></td><td>{local_part}</td></tr>
+    <tr><td><strong>Domain</strong></td><td>{domain}</td></tr>
+    </table>
+    """
+    st.markdown(f'<div class="table-wrap">{parse_html}</div>', unsafe_allow_html=True)
+
+    # ── Person Profile ──
+    if result.person:
+        p = result.person
+        conf_color = {"High": "#16a34a", "Medium": "#2563eb", "Low": "#d97706", "Unknown": "#6b7280"}
+        color = conf_color.get(p.confidence_level, "#6b7280")
+
+        st.markdown(f"**Person Profile** — <span style='color:{color};font-weight:700'>{p.confidence_level} Confidence ({p.confidence:.0f}%)</span>", unsafe_allow_html=True)
+
+        person_rows = []
+        if p.full_name:
+            person_rows.append(("Full Name", p.full_name))
+        if p.first_name:
+            person_rows.append(("First Name", p.first_name))
+        if p.last_name:
+            person_rows.append(("Last Name", p.last_name))
+        if p.job_title:
+            person_rows.append(("Job Title", p.job_title))
+        if p.department:
+            person_rows.append(("Department", p.department))
+        if p.company_name:
+            person_rows.append(("Company", p.company_name))
+        if p.phone:
+            person_rows.append(("Phone", p.phone))
+        if p.country:
+            person_rows.append(("Country", p.country))
+        if p.city:
+            person_rows.append(("City", p.city))
+
+        social_rows = []
+        if p.linkedin_url:
+            social_rows.append(("LinkedIn", f'<a href="{p.linkedin_url}" target="_blank">{p.linkedin_url}</a>'))
+        if p.github_url:
+            social_rows.append(("GitHub", f'<a href="{p.github_url}" target="_blank">{p.github_url}</a>'))
+        if p.twitter_url:
+            social_rows.append(("Twitter/X", f'<a href="{p.twitter_url}" target="_blank">{p.twitter_url}</a>'))
+        if p.facebook_url:
+            social_rows.append(("Facebook", f'<a href="{p.facebook_url}" target="_blank">{p.facebook_url}</a>'))
+        if p.instagram_url:
+            social_rows.append(("Instagram", f'<a href="{p.instagram_url}" target="_blank">{p.instagram_url}</a>'))
+
+        if person_rows or social_rows:
+            html = '<table class="results-table"><thead><tr><th>Property</th><th>Value</th></tr></thead><tbody>'
+            for label, value in person_rows:
+                html += f"<tr><td><strong>{label}</strong></td><td>{value}</td></tr>"
+            for label, value in social_rows:
+                html += f"<tr><td><strong>{label}</strong></td><td>{value}</td></tr>"
+            html += "</tbody></table>"
+            st.markdown(f'<div class="table-wrap">{html}</div>', unsafe_allow_html=True)
+
+        if p.sources:
+            st.caption(f"Sources: {', '.join(p.sources[:10])}")
+
+    # ── Company Profile ──
+    if result.company:
+        c = result.company
+        st.markdown("**Company Profile:**")
+
+        company_rows = []
+        if c.name:
+            company_rows.append(("Company Name", c.name))
+        if c.domain:
+            company_rows.append(("Domain", c.domain))
+        if c.description:
+            company_rows.append(("Description", c.description[:300]))
+        if c.linkedin_url:
+            company_rows.append(("LinkedIn", f'<a href="{c.linkedin_url}" target="_blank">{c.linkedin_url}</a>'))
+        if c.crunchbase_url:
+            company_rows.append(("Crunchbase", f'<a href="{c.crunchbase_url}" target="_blank">{c.crunchbase_url}</a>'))
+        if c.country:
+            company_rows.append(("Country", c.country))
+        if c.city:
+            company_rows.append(("City", c.city))
+        if c.phone:
+            company_rows.append(("Phone", c.phone))
+        if c.email:
+            company_rows.append(("Email", c.email))
+        if c.domain_age:
+            company_rows.append(("Domain Age", c.domain_age))
+        if c.domain_registrar:
+            company_rows.append(("Registrar", c.domain_registrar))
+        if c.logo_url:
+            company_rows.append(("Logo", f'<img src="{c.logo_url}" height="40" />'))
+        if c.employees:
+            company_rows.append(("Employees Found", ", ".join(c.employees[:10])))
+
+        if company_rows:
+            html = '<table class="results-table"><thead><tr><th>Property</th><th>Value</th></tr></thead><tbody>'
+            for label, value in company_rows:
+                html += f"<tr><td><strong>{label}</strong></td><td>{value}</td></tr>"
+            html += "</tbody></table>"
+            st.markdown(f'<div class="table-wrap">{html}</div>', unsafe_allow_html=True)
+
+    # ── AI Summary ──
+    if result.ai_summary:
+        st.markdown('<div class="white-card white-card-sm">', unsafe_allow_html=True)
+        st.markdown("<h3>📝 AI Summary</h3>", unsafe_allow_html=True)
+        st.markdown(f"<p>{result.ai_summary}</p>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Meta ──
+    st.caption(f"Processing time: {result.processing_time_ms:.0f}ms | Enriched: {'Yes' if result.enriched else 'No'}")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _display_single_result(result: VerificationResult):

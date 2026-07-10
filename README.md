@@ -1,11 +1,12 @@
 # Email Verifier
 
-A production-ready bulk email verification app built with Streamlit. Uses a 16-stage verification pipeline with SMTP probing, catch-all detection, typo suggestions, IDN support, and comprehensive scoring.
+A production-ready bulk email verification and intelligence app built with Streamlit. Uses a 16-stage verification pipeline with SMTP probing, catch-all detection, typo suggestions, IDN support, comprehensive scoring, and public profile enrichment.
 
 ## Features
 
-- **Dual-tab UI** - Bulk verification (CSV/XLSX upload) and single-email lookup
+- **Triple-tab UI** - Bulk verification, single email, and email intelligence
 - **16-stage pipeline** - Syntax → Typo → DNS/MX → Provider → SMTP → Catch-All → Disposable → Role → Scoring
+- **Email Intelligence** - Public profile enrichment from company websites and social profiles
 - **Three SMTP modes** - Disabled, Test (Mailpit), and Real (recipient MX probing)
 - **SMTP mailbox probing** - EHLO/MAIL FROM/RCPT TO with provider-specific overrides
 - **Catch-all detection** - Probes random addresses to detect catch-all mail servers
@@ -17,6 +18,9 @@ A production-ready bulk email verification app built with Streamlit. Uses a 16-s
 - **Dashboard** - Real-time metrics, filters, and score breakdown
 - **Export** - CSV, multi-sheet Excel with domain summaries and statistics
 - **Mailpit integration** - Free local SMTP test server via Docker Compose
+- **Email Intelligence** - Person and company enrichment from public web sources
+- **Domain-deduplicated lookups** - Company data cached per domain, not per email
+- **Profile matching** - Confidence-ranked person profiles with source tracking
 
 ## Architecture
 
@@ -206,7 +210,45 @@ NOTIFICATION_SMTP_ENABLED=false
 .venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
-143 tests covering syntax, normalization, DNS, SMTP (test mode + real), catch-all, disposable, role detection, scoring, pipeline, bulk processing, export, and caching.
+173 tests covering syntax, normalization, DNS, SMTP (test mode + real), catch-all, disposable, role detection, scoring, pipeline, bulk processing, export, caching, and email enrichment.
+
+## Email Intelligence
+
+The enrichment engine searches public web sources (no API keys required) to build person and company profiles from email addresses.
+
+### What it extracts
+
+| Category | Fields |
+|----------|--------|
+| **Person** | First/last name, full name, job title, department, location, phone |
+| **Social** | LinkedIn, GitHub, Twitter/X, Facebook, Instagram URLs |
+| **Company** | Name, description, industry, employee count, social links |
+| **Domain** | Age, registrar (WHOIS) |
+| **AI Summary** | Natural-language profile summary |
+
+### Architecture
+
+```
+enrichment/
+├── __init__.py          # Package exports
+├── models.py            # PersonProfile, CompanyProfile, EnrichmentResult
+├── cache.py             # Thread-safe TTL cache for web requests
+├── search_engine.py     # Query generation, HTML/text extraction
+├── company_lookup.py    # Company scraping from meta tags, social links
+├── person_lookup.py     # Person enrichment from email local part
+├── profile_matcher.py   # Confidence ranking, profile deduplication
+├── whois_lookup.py      # Domain WHOIS (python-whois + DNS fallback)
+└── summary.py           # Natural-language AI summary generation
+```
+
+### How it works
+
+1. **Email parsing** → Extract first/last name from local part (`john.smith@`)
+2. **Company lookup** → Scrape company website for meta tags, social links, employee names
+3. **Person lookup** → Search for person profiles by name + company
+4. **Profile matching** → Rank multiple profile candidates by confidence
+5. **WHOIS** → Domain age and registrar from public WHOIS data
+6. **Summary** → Generate natural-language summary from all collected data
 
 ## Production Safety
 

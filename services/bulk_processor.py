@@ -7,6 +7,9 @@ from verifier.pipeline import VerificationPipeline
 from verifier.config import VerifierConfig
 from verifier.models import VerificationResult
 from verifier.normalizer import normalize_email
+from enrichment.company_lookup import lookup_company
+from enrichment.person_lookup import lookup_person
+from enrichment.summary import generate_summary as generate_enrichment_summary
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +18,12 @@ class BulkProcessor:
         self,
         config: Optional[VerifierConfig] = None,
         progress_callback: Optional[Callable[[int, int, dict], None]] = None,
+        enrichment_enabled: bool = False,
     ):
         self.config = config or VerifierConfig()
         self.pipeline = VerificationPipeline(self.config)
         self.progress_callback = progress_callback
+        self.enrichment_enabled = enrichment_enabled
         self._cancelled = False
 
     def process(
@@ -58,6 +63,10 @@ class BulkProcessor:
                 results_dict[result.normalized_email or result.original_email] = result
 
         result_df = self._map_results_back(df, results_dict, email_column, duplicate_map)
+
+        if self.enrichment_enabled:
+            result_df = self._enrich_results(result_df, email_column)
+
         return result_df
 
     def _detect_duplicates(
@@ -207,6 +216,88 @@ class BulkProcessor:
             result_df = result_df.reset_index(drop=True)
 
         return result_df
+
+    def _enrich_results(self, df: pd.DataFrame, email_column: str) -> pd.DataFrame:
+        """Enrich results with public profile data. Deduplicates by domain."""
+        if df.empty:
+            return df
+
+        enrichment_cols = [
+            "first_name", "last_name", "full_name", "company_name", "company_website",
+            "company_description", "department", "job_title", "linkedin_url", "company_linkedin",
+            "github_url", "twitter_url", "facebook_url", "instagram_url",
+            "country", "city", "phone", "domain_age", "domain_registrar",
+            "enrichment_confidence", "public_sources", "ai_summary",
+        ]
+        for col in enrichment_cols:
+            if col not in df.columns:
+                df[col] = ""
+
+        # Deduplicate by domain for company lookups
+        domain_cache = {}
+        email_col = "original_email" if "original_email" in df.columns else email_column
+
+        for idx in df.index:
+            raw = str(df.at[idx, email_col]).strip() if pd.notna(df.at[idx, email_col]) else ""
+            if not raw or "@" not in raw:
+                continue
+
+            domain = raw.split("@")[1].lower()
+            local_part = raw.split("@")[0]
+
+            # Company lookup (cached per domain)
+            company = None
+            if domain not in domain_cache:
+                try:
+                    company = lookup_company(domain)
+                    domain_cache[domain] = company
+                except Exception:
+                    domain_cache[domain] = None
+            company = domain_cache.get(domain)
+
+            # Person lookup
+            person = None
+            try:
+                person = lookup_person(raw, company_profile=company)
+            except Exception:
+                pass
+
+            # Map results back
+            if person:
+                df.at[idx, "first_name"] = person.first_name
+                df.at[idx, "last_name"] = person.last_name
+                df.at[idx, "full_name"] = person.full_name
+                df.at[idx, "job_title"] = person.job_title
+                df.at[idx, "department"] = person.department
+                df.at[idx, "linkedin_url"] = person.linkedin_url
+                df.at[idx, "github_url"] = person.github_url
+                df.at[idx, "twitter_url"] = person.twitter_url
+                df.at[idx, "facebook_url"] = person.facebook_url
+                df.at[idx, "instagram_url"] = person.instagram_url
+                df.at[idx, "country"] = person.country
+                df.at[idx, "city"] = person.city
+                df.at[idx, "phone"] = person.phone
+                df.at[idx, "enrichment_confidence"] = person.confidence_level
+                df.at[idx, "public_sources"] = "; ".join(person.sources[:5])
+
+            if company:
+                df.at[idx, "company_name"] = company.name
+                df.at[idx, "company_website"] = f"https://{company.domain}"
+                df.at[idx, "company_description"] = company.description[:200] if company.description else ""
+                df.at[idx, "company_linkedin"] = company.linkedin_url
+                df.at[idx, "domain_age"] = company.domain_age
+                df.at[idx, "domain_registrar"] = company.domain_registrar
+
+            # AI summary
+            try:
+                df.at[idx, "ai_summary"] = generate_enrichment_summary(person, company)
+            except Exception:
+                pass
+
+            if self.progress_callback:
+                self.progress_callback(idx + 1, len(df), {"phase": "enrichment"})
+
+        return df
 
     def cancel(self):
         self._cancelled = True
