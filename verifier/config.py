@@ -20,6 +20,9 @@ class VerifierConfig:
     smtp_response_timeout: int = 5
     smtp_max_attempts: int = 2
 
+    # Custom DNS server (empty = use system default)
+    custom_dns_server: str = ""
+
     # Test mode / local SMTP server
     smtp_test_mode: bool = False
     test_smtp_host: str = "localhost"
@@ -73,9 +76,14 @@ class VerifierConfig:
     @classmethod
     def from_env(cls) -> "VerifierConfig":
         return cls(
-            verifier_email=os.getenv("VERIFIER_EMAIL", "audrey.watson@safebooksglobalau.com"),
-            verifier_domain=os.getenv("VERIFIER_DOMAIN", "safebooksglobalau.com"),
-            enable_smtp_check=os.getenv("ENABLE_SMTP_CHECK", "false").lower() == "true",
+            smtp_real_host=os.getenv("GMAIL_SMTP_HOST", "smtp.gmail.com"),
+            smtp_real_port=int(os.getenv("GMAIL_SMTP_PORT", "587")),
+            smtp_real_username=os.getenv("GMAIL_SMTP_USERNAME", "vaibhav2694p@gmail.com"),
+            smtp_real_password=os.getenv("GMAIL_SMTP_PASSWORD", "apasswordforyourgmail"),
+            smtp_real_use_tls=os.getenv("GMAIL_SMTP_USE_TLS", "true").lower() == "true",
+            verifier_email=os.getenv("GMAIL_SMTP_USERNAME", "vaibhav2694p@gmail.com"),
+            verifier_domain=os.getenv("VERIFIER_DOMAIN", "gmail.com"),
+            enable_smtp_check=os.getenv("ENABLE_SMTP_CHECK", "true").lower() == "true",
             smtp_port=int(os.getenv("SMTP_PORT", "25")),
             smtp_connection_timeout=int(os.getenv("SMTP_CONNECTION_TIMEOUT", "5")),
             smtp_response_timeout=int(os.getenv("SMTP_RESPONSE_TIMEOUT", "5")),
@@ -94,7 +102,7 @@ class VerifierConfig:
             test_smtp_use_tls=os.getenv("TEST_SMTP_USE_TLS", "false").lower() == "true",
             test_smtp_username=os.getenv("TEST_SMTP_USERNAME", ""),
             test_smtp_password=os.getenv("TEST_SMTP_PASSWORD", ""),
-            smtp_verification_mode=os.getenv("SMTP_VERIFICATION_MODE", "test"),
+            smtp_verification_mode=os.getenv("SMTP_VERIFICATION_MODE", "real"),
             domain_rate_limit=int(os.getenv("SMTP_DOMAIN_RATE_LIMIT", "2")),
             notification_smtp_enabled=os.getenv("NOTIFICATION_SMTP_ENABLED", "false").lower() == "true",
             notification_smtp_host=os.getenv("NOTIFICATION_SMTP_HOST", ""),
