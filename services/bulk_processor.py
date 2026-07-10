@@ -1,15 +1,16 @@
-import pandas as pd
 import logging
-from typing import List, Dict, Optional, Callable, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from collections import defaultdict
-from verifier.pipeline import VerificationPipeline
-from verifier.config import VerifierConfig
-from verifier.models import VerificationResult
-from verifier.normalizer import normalize_email
+from typing import Callable, Dict, List, Optional, Tuple
+
+import pandas as pd
+
 from enrichment.company_lookup import lookup_company
 from enrichment.person_lookup import lookup_person
 from enrichment.summary import generate_summary as generate_enrichment_summary
+from verifier.config import VerifierConfig
+from verifier.models import VerificationResult
+from verifier.normalizer import normalize_email
+from verifier.pipeline import VerificationPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,8 @@ class BulkProcessor:
         df = df.copy()
         df["is_duplicate"] = False
         df["duplicate_of"] = ""
+        df["duplicate_group"] = ""
+        df["first_occurrence_row"] = 0
 
         seen_normalized = {}
         duplicate_map = {}
@@ -92,9 +95,13 @@ class BulkProcessor:
                 first_idx = seen_normalized[normalized]
                 df.at[idx, "is_duplicate"] = True
                 df.at[idx, "duplicate_of"] = str(df.at[first_idx, email_column])
+                df.at[idx, "duplicate_group"] = normalized
+                df.at[idx, "first_occurrence_row"] = int(first_idx) + 1 if isinstance(first_idx, int) else 0
                 duplicate_map[str(idx)] = str(df.at[first_idx, email_column])
             else:
                 seen_normalized[normalized] = idx
+                df.at[idx, "duplicate_group"] = normalized
+                df.at[idx, "first_occurrence_row"] = int(idx) + 1 if isinstance(idx, int) else 0
 
         return df, duplicate_map
 
@@ -205,6 +212,12 @@ class BulkProcessor:
                 result_dict = result.to_dict()
                 row.update(result_dict)
                 row["original_email"] = result.original_email
+                row["is_duplicate"] = bool(df.at[idx, "is_duplicate"]) if "is_duplicate" in df.columns else False
+                row["duplicate_of"] = str(df.at[idx, "duplicate_of"]) if "duplicate_of" in df.columns else ""
+                row["duplicate_group"] = str(df.at[idx, "duplicate_group"]) if "duplicate_group" in df.columns else ""
+                row["first_occurrence_row"] = int(df.at[idx, "first_occurrence_row"]) if "first_occurrence_row" in df.columns else 0
+                if row["is_duplicate"]:
+                    row["verification_status"] = "Duplicate"
             else:
                 row["original_email"] = raw
 
@@ -243,7 +256,6 @@ class BulkProcessor:
                 continue
 
             domain = raw.split("@")[1].lower()
-            local_part = raw.split("@")[0]
 
             # Company lookup (cached per domain)
             company = None

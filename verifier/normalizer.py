@@ -1,6 +1,6 @@
 import re
-import unicodedata
 from typing import Tuple
+
 from .exceptions import SyntaxError as EmailSyntaxError
 
 
@@ -17,13 +17,8 @@ def normalize_email(email: str) -> str:
     at_count = email.count("@")
     if at_count == 0:
         raise EmailSyntaxError(detail="Email must contain an '@' symbol")
-    if at_count > 2:
-        raise EmailSyntaxError(detail=f"Email contains {at_count} '@' symbols, expected 1 or 2")
-
-    if at_count == 2:
-        at_position = email.index("@")
-        second_at_position = email.index("@", at_position + 1)
-        email = email[:at_position] + "@" + email[at_position + 1:].replace("@", "")
+    if at_count != 1:
+        raise EmailSyntaxError(detail=f"Email contains {at_count} '@' symbols, expected 1")
 
     parts = email.split("@")
     if len(parts) != 2:
@@ -104,13 +99,8 @@ def split_email(email: str) -> Tuple[str, str]:
     at_count = email.count("@")
     if at_count == 0:
         raise EmailSyntaxError(message="Invalid email", detail="Email must contain an '@' symbol")
-    if at_count > 2:
-        raise EmailSyntaxError(message="Invalid email", detail=f"Email contains {at_count} '@' symbols")
-
-    if at_count == 2:
-        at_position = email.index("@")
-        second_at_position = email.index("@", at_position + 1)
-        email = email[:at_position] + "@" + email[at_position + 1:].replace("@", "")
+    if at_count != 1:
+        raise EmailSyntaxError(message="Invalid email", detail=f"Email contains {at_count} '@' symbols, expected 1")
 
     local_part, domain = email.split("@", 1)
 

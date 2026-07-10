@@ -1,8 +1,8 @@
-import time
-import threading
-import json
 import hashlib
+import threading
+import time
 from typing import Any, Optional
+
 
 class EnrichmentCache:
     """Thread-safe TTL cache for enrichment results."""

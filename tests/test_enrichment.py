@@ -1,16 +1,19 @@
-import pytest
-from unittest.mock import patch, MagicMock
-from enrichment.models import PersonProfile, CompanyProfile, EnrichmentResult
+from unittest.mock import patch
+
 from enrichment.cache import EnrichmentCache
+from enrichment.company_lookup import lookup_company
+from enrichment.models import CompanyProfile, EnrichmentResult, PersonProfile
+from enrichment.person_lookup import lookup_person
+from enrichment.profile_matcher import build_company_summary, match_profiles
 from enrichment.search_engine import (
-    extract_name_from_email, generate_search_queries,
-    extract_social_links, extract_phones_from_text,
-    extract_text_from_html, extract_emails_from_text,
+    extract_emails_from_text,
+    extract_name_from_email,
+    extract_phones_from_text,
+    extract_social_links,
+    extract_text_from_html,
+    generate_search_queries,
 )
 from enrichment.summary import generate_summary
-from enrichment.profile_matcher import match_profiles, build_company_summary
-from enrichment.company_lookup import lookup_company
-from enrichment.person_lookup import lookup_person
 
 
 class TestEnrichmentModels:

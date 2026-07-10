@@ -1,13 +1,13 @@
-import smtplib
-import socket
-import ssl
-import time
 import logging
 import re
-from typing import Optional, Tuple, List, Dict
-from .models import SmtpResult, SmtpStatus, DnsResult
-from .config import VerifierConfig
+import smtplib
+import socket
+import time
+from typing import Dict, List, Optional, Tuple
+
 from .cache import TTLCache
+from .config import VerifierConfig
+from .models import SmtpResult, SmtpStatus
 
 logger = logging.getLogger(__name__)
 

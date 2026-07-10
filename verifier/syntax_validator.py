@@ -1,6 +1,8 @@
+import importlib.util
 import re
 import unicodedata
-from typing import Tuple, Optional
+from typing import Optional, Tuple
+
 from .models import SyntaxResult
 
 LOCAL_MAX = 64
@@ -18,12 +20,10 @@ DOMAIN_CHARS = re.compile(
     r'^[a-zA-Z0-9.-]+$'
 )
 
-IDNA_AVAILABLE = False
 try:
-    import idna as _idna
-    IDNA_AVAILABLE = True
-except ImportError:
-    pass
+    IDNA_AVAILABLE = importlib.util.find_spec("idna") is not None
+except (ImportError, ValueError):
+    IDNA_AVAILABLE = False
 
 
 def _punycode_domain(domain: str) -> Tuple[Optional[str], Optional[str]]:
@@ -87,7 +87,7 @@ def validate_domain_syntax(domain: str) -> Tuple[bool, str]:
         return False, "Domain contains consecutive dots"
 
     if domain.startswith('.') or domain.startswith('-'):
-        return False, f"Domain must not start with a dot or hyphen"
+        return False, "Domain must not start with a dot or hyphen"
 
     if domain.endswith('.') or domain.endswith('-'):
         return False, "Domain must not end with a dot or hyphen"
@@ -108,7 +108,7 @@ def validate_domain_syntax(domain: str) -> Tuple[bool, str]:
     labels = domain.split('.')
     for i, label in enumerate(labels):
         if not label:
-            return False, f"Domain contains an empty label (consecutive dots)"
+            return False, "Domain contains an empty label (consecutive dots)"
         if len(label) > LABEL_MAX:
             return False, f"Domain label '{label}' exceeds {LABEL_MAX} characters ({len(label)} given)"
         if label.startswith('-'):
@@ -173,19 +173,11 @@ def validate_syntax(email: str) -> SyntaxResult:
     if at_count == 0:
         result.error = "Email must contain an '@' symbol"
         return result
-    if at_count > 2:
-        result.error = f"Email contains {at_count} '@' symbols; only 1 or 2 are allowed"
+    if at_count != 1:
+        result.error = f"Email contains {at_count} '@' symbols; exactly 1 is required"
         return result
 
-    # Handle exactly 2 @ signs — keep the first, discard the rest (some
-    # systems use user@host@ to mean user@host).
-    if at_count == 2:
-        first_at = email.index("@")
-        second_at = email.index("@", first_at + 1)
-        local_part = email[:first_at]
-        domain = email[first_at + 1:second_at] + email[second_at + 1:]
-    else:
-        local_part, domain = email.split("@", 1)
+    local_part, domain = email.split("@", 1)
 
     # ------------------------------------------------------------------
     # 4. Empty local part

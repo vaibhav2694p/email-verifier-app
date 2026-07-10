@@ -2,8 +2,7 @@ import asyncio
 import logging
 import re
 import threading
-import time
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

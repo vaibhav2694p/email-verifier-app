@@ -1,8 +1,10 @@
-from typing import List, Tuple, Optional
+from typing import List
+
 from .models import (
-    VerificationResult, VerificationStatus, ConfidenceLevel,
-    RiskLevel, SyntaxResult, DnsResult, SmtpResult, CatchAllResult,
-    CatchAllStatus,
+    ConfidenceLevel,
+    RiskLevel,
+    VerificationResult,
+    VerificationStatus,
 )
 
 

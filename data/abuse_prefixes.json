@@ -1,0 +1,21 @@
+{
+  "abuse": "Abuse Reporting",
+  "postmaster": "System Mailbox",
+  "hostmaster": "Technical Contact",
+  "webmaster": "Technical Contact",
+  "security": "Security Contact",
+  "fraud": "Complaint Contact",
+  "phishing": "Complaint Contact",
+  "spam": "Complaint Contact",
+  "complaints": "Complaint Contact",
+  "privacy": "Legal Contact",
+  "legal": "Legal Contact",
+  "dmca": "Legal Contact",
+  "noreply": "No-Reply",
+  "no-reply": "No-Reply",
+  "donotreply": "No-Reply",
+  "do-not-reply": "No-Reply",
+  "mailer-daemon": "System Mailbox",
+  "bounce": "System Mailbox",
+  "bounces": "System Mailbox"
+}

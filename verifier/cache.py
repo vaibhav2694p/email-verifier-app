@@ -1,6 +1,6 @@
-import time
 import threading
-from typing import Any, Optional, Dict
+import time
+from typing import Any, Dict, Optional
 
 
 class TTLCache:

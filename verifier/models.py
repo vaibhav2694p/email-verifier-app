@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
 from enum import Enum
-import time
+from typing import Any, Dict, List, Optional
 
 
 class VerificationStatus(Enum):
@@ -14,6 +13,16 @@ class VerificationStatus(Enum):
     CATCH_ALL = "Catch-All"
     DISPOSABLE = "Disposable"
     ROLE_BASED = "Role-Based"
+    ABUSE = "Abuse"
+    SPAM_TRAP_RISK = "Spam Trap Risk"
+    TOXIC_RISK = "Toxic Risk"
+    DO_NOT_MAIL = "Do Not Mail"
+    NO_DOMAIN = "No Domain"
+    NO_MX = "No MX"
+    MAILBOX_FULL = "Mailbox Full"
+    SMTP_BLOCKED = "SMTP Blocked"
+    GREYLISTED = "Greylisted"
+    DUPLICATE = "Duplicate"
     SYNTAX_ERROR = "Syntax Error"
     NO_MAIL_SERVER = "No Mail Server"
 
@@ -103,6 +112,10 @@ class DnsResult:
     dns_error: str = ""
     dns_response_time_ms: float = 0.0
     has_mx: bool = False
+    a_records: List[str] = field(default_factory=list)
+    aaaa_records: List[str] = field(default_factory=list)
+    cname_records: List[str] = field(default_factory=list)
+    resolver_used: str = ""
 
 
 @dataclass
@@ -142,10 +155,16 @@ class VerificationResult:
     normalized_email: str = ""
     local_part: str = ""
     domain: str = ""
+    cleaned_email: str = ""
+    root_domain: str = ""
+    idn_domain_text: str = ""
+    punycode_domain: str = ""
 
     # Syntax
     syntax_valid: bool = False
     syntax_error: str = ""
+    syntax_error_code: str = ""
+    normalization_notes: str = ""
     idn_domain: bool = False
     domain_typo: bool = False
     suggested_email: str = ""
@@ -155,36 +174,132 @@ class VerificationResult:
     dns_status: str = "Not Checked"
     mx_status: str = "Not Checked"
     mx_records: str = ""
+    mx_priorities: str = ""
     primary_mx: str = ""
     mx_provider: str = ""
+    a_records: str = ""
+    aaaa_records: str = ""
+    cname_records: str = ""
     null_mx: bool = False
+    dns_error: str = ""
+    dns_response_time_ms: float = 0.0
+    dns_resolver_used: str = ""
     domain_active: bool = False
     website_status: str = "Not Checked"
 
     # SMTP
     smtp_attempted: bool = False
+    smtp_connected: bool = False
     smtp_status: str = "Not Attempted"
     smtp_code: int = 0
     smtp_message: str = ""
+    smtp_mx_host: str = ""
+    smtp_response_time_ms: float = 0.0
+    smtp_tls_supported: bool = False
+    smtp_greylisted: bool = False
+    smtp_rate_limited: bool = False
+    smtp_policy_block: bool = False
+    smtp_port_blocked: bool = False
+    smtp_blocked: bool = False
+    mailbox_accepted: bool = False
+    mailbox_rejected: bool = False
+    mailbox_full: bool = False
+    temporary_failure: bool = False
+    smtp_inconclusive: bool = False
+    mailbox_evidence: str = "Unknown"
 
     # Classification
     catch_all: str = "Not Tested"
+    catch_all_tested: bool = False
+    catch_all_confidence: float = 0.0
+    catch_all_smtp_codes: str = ""
+    catch_all_notes: str = ""
     disposable: bool = False
+    disposable_provider: str = ""
+    disposable_category: str = ""
+    disposable_dataset_match: str = ""
+    disposable_risk: str = ""
     free_public_email: bool = False
+    corporate_email: bool = False
+    email_provider: str = ""
+    mail_hosting_provider: str = ""
+    provider_category: str = ""
+    provider_confidence: float = 0.0
     role_based: bool = False
     role_category: str = ""
+    role_prefix: str = ""
+    role_risk: str = ""
+    engagement_risk: str = ""
+    abuse_address: bool = False
+    abuse_category: str = ""
+    do_not_mail: bool = False
+    abuse_reason: str = ""
     company_domain_match: Optional[bool] = None
+
+    # Risk and reputation
+    spam_trap_risk: str = "Unknown"
+    spam_trap_signals: List[str] = field(default_factory=list)
+    spam_trap_data_source: str = "heuristic"
+    spam_trap_confidence: str = "Low"
+    confirmed_trap: bool = False
+    toxic_risk: str = "Unknown"
+    toxic_signals: List[str] = field(default_factory=list)
+    complaint_history: str = "Not Provided"
+    bounce_history: str = "Not Provided"
+    fraud_risk: str = "Unknown"
+    toxic_risk_source: str = "heuristic"
+    toxic_confidence: str = "Low"
+
+    # Greylisting and retry
+    greylisting_detected: bool = False
+    retry_required: bool = False
+    retry_count: int = 0
+    retry_result: str = ""
+    final_smtp_status: str = ""
+    timeout_stage: str = ""
+    timeout_duration: float = 0.0
+    connection_error: str = ""
+    retry_attempted: bool = False
+
+    # Domain health
+    spf_record: str = ""
+    spf_status: str = "Not Checked"
+    spf_issues: str = ""
+    dmarc_record: str = ""
+    dmarc_policy: str = ""
+    dmarc_status: str = "Not Checked"
+    dmarc_reporting_addresses: str = ""
+    dkim_status: str = "Not Checked"
+    dkim_selector: str = ""
+    bimi_status: str = "Not Checked"
+    domain_blacklisted: bool = False
+    blacklist_checked: bool = False
+    blacklist_status: str = "Not Checked"
+    listed_on: str = ""
+    blacklist_lookup_errors: str = ""
+    blacklist_last_checked: str = ""
+    domain_age: str = ""
+    domain_registrar: str = ""
 
     # Final
     verification_status: str = "Invalid"
     verification_score: int = 0
+    deliverability_score: int = 0
+    ai_quality_score: int = 0
     confidence_level: str = "Low"
     risk_level: str = "High"
+    recommended_action: str = "Manual Review"
+    reason: str = ""
     is_duplicate: bool = False
     duplicate_of: str = ""
+    duplicate_group: str = ""
+    first_occurrence_row: int = 0
 
     # Meta
     processing_time_ms: float = 0.0
+    verification_run_id: str = ""
+    upload_date: str = ""
+    original_file_name: str = ""
     notes: str = ""
     score_reasons: List[str] = field(default_factory=list)
     failed_checks: List[str] = field(default_factory=list)

@@ -5,7 +5,11 @@ A production-ready bulk email verification and intelligence app built with Strea
 ## Features
 
 - **Triple-tab UI** - Bulk verification, single email, and email intelligence
-- **16-stage pipeline** - Syntax → Typo → DNS/MX → Provider → SMTP → Catch-All → Disposable → Role → Scoring
+- **Advanced pipeline** - Syntax → DNS/MX → Provider → SMTP → Catch-All → Disposable → Role/Abuse → Risk → Scoring → Classification
+- **TXT upload** - Supports one-per-line, comma, semicolon, and tab-delimited email lists
+- **Email verification API** - FastAPI endpoints for single, bulk, job status, domain health, and webhook tests
+- **Domain health** - SPF, DMARC, DKIM-selector, BIMI, and optional DNSBL checks
+- **Risk signals** - Abuse-address detection, greylisting, spam-trap risk, toxic-risk, and explicit recommended actions
 - **Email Intelligence** - Public profile enrichment from company websites and social profiles
 - **Three SMTP modes** - Disabled, Test (Mailpit), and Real (recipient MX probing)
 - **SMTP mailbox probing** - EHLO/MAIL FROM/RCPT TO with provider-specific overrides
@@ -25,9 +29,11 @@ A production-ready bulk email verification and intelligence app built with Strea
 ## Architecture
 
 ```
-app.py                          # Streamlit UI (dual-tab)
+app.py                          # Streamlit UI
+pages/                          # Streamlit multipage entrypoints
+api/                            # FastAPI app, routes, schemas, auth, rate limits
 verifier/
-  pipeline.py                   # 16-stage orchestrator
+  pipeline.py                   # Verification orchestrator
   models.py                     # VerificationResult, PipelineStage, enums
   config.py                     # VerifierConfig (env vars + defaults)
   cache.py                      # Thread-safe TTLCache
@@ -40,11 +46,26 @@ verifier/
   catch_all.py                  # Random-address catch-all detection
   disposable.py                 # Disposable domain detection
   role_detector.py              # Role-based address detection
+  abuse_detector.py             # Abuse/system/no-reply mailbox detection
+  spamtrap_risk.py              # Explainable spam-trap risk signals
+  toxic_risk.py                 # Explainable toxic-risk signals
+  greylist_handler.py           # Temporary failure / greylist classification
+  classifier.py                 # Final deterministic status/action rules
   scoring.py                    # Weighted confidence scoring
+domain_health/
+  spf_checker.py                # SPF TXT checks
+  dmarc_checker.py              # DMARC policy/reporting checks
+  dkim_checker.py               # Configured DKIM selector checks
+  blacklist_checker.py          # Optional DNSBL checks
+  monitor.py                    # Domain health aggregation
 services/
   bulk_processor.py             # ThreadPoolExecutor + duplicate detection
   export_service.py             # CSV/XLSX export with multi-sheet Excel
   summary_service.py            # Dashboard stats and filter application
+  input_service.py              # CSV/XLSX/XLS/TXT parsing and validation
+  webhook_service.py            # HMAC signing and delivery
+  job_service.py                # In-memory API job tracker
+  history_service.py            # SQLite verification history helper
 data/
   disposable_domains.txt        # 500+ disposable domains
   public_domains.json           # Free domains + workspace MX patterns
@@ -53,7 +74,7 @@ data/
 tests/
   smtp_test_server.py           # Deterministic Python SMTP test server
   test_smtp_validation.py       # SMTP tests including test mode
-  ...                           # 143 tests total
+  ...                           # 189 tests total
 ```
 
 ## SMTP Verification Modes
@@ -144,7 +165,7 @@ Set SMTP mode to "Test" in the sidebar and configure the test SMTP host/port.
 ## Usage
 
 ### Bulk Verification
-1. Upload CSV/XLSX
+1. Upload CSV/XLSX/XLS/TXT
 2. Select email column and optional company domain column
 3. Click "Verify Emails"
 4. View dashboard, filter results, download exports
@@ -180,7 +201,37 @@ Set SMTP mode to "Test" in the sidebar and configure the test SMTP host/port.
 | Disposable domain | -50 |
 | No MX records | -40 |
 
-Status mapping: Valid (≥75), Likely Valid (≥50), Risky (≥30), Invalid (<30)
+Final classification is deterministic and does not convert inconclusive SMTP results into invalid results. `Unknown`, `SMTP Blocked`, `Greylisted`, and `Temporary Failure` remain separate statuses.
+
+## API
+
+Run locally:
+
+```bash
+uvicorn api.main:app --reload
+```
+
+Endpoints:
+
+```text
+POST /api/v1/verify
+POST /api/v1/verify/bulk
+GET  /api/v1/jobs/{job_id}
+GET  /api/v1/jobs/{job_id}/results
+GET  /api/v1/domains/{domain}/health
+POST /api/v1/webhooks/test
+GET  /api/v1/health
+```
+
+Set `API_KEY` to require `X-API-Key` authentication. API responses avoid internal stack traces.
+
+## Webhooks
+
+Bulk jobs can include a webhook URL. Payloads are signed with `X-Email-Verifier-Signature` using HMAC-SHA256 and `WEBHOOK_SECRET`. Production webhook URLs must use HTTPS.
+
+## Domain Health
+
+Domain health checks include SPF, DMARC, configured DKIM selectors, BIMI, and optional DNSBL checks. DNSBL providers are administrator-configured and disabled by default to respect provider terms.
 
 ## Environment Variables
 
@@ -202,6 +253,13 @@ TEST_SMTP_PORT=1025
 
 # Notifications (optional, admin only)
 NOTIFICATION_SMTP_ENABLED=false
+
+# API / webhooks / monitoring
+API_ENABLED=true
+API_KEY=
+WEBHOOK_SECRET=
+ENABLE_DOMAIN_MONITORING=false
+ENABLE_BLACKLIST_CHECK=false
 ```
 
 ## Testing
@@ -210,7 +268,7 @@ NOTIFICATION_SMTP_ENABLED=false
 .venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
-173 tests covering syntax, normalization, DNS, SMTP (test mode + real), catch-all, disposable, role detection, scoring, pipeline, bulk processing, export, caching, and email enrichment.
+189 tests covering syntax, normalization, DNS, SMTP (test mode + real), catch-all, disposable, role/abuse detection, risk scoring, pipeline, API, webhook signing, TXT parsing, bulk processing, export, caching, and email enrichment.
 
 ## Email Intelligence
 
@@ -257,3 +315,6 @@ enrichment/
 - Never expose port 1025 or Mailpit inbox publicly
 - Never commit `.env` or SMTP credentials
 - Never use verification to send unsolicited messages
+- Spam-trap and toxic-risk outputs are risk-based unless a trusted configured dataset is supplied
+- Inbox placement testing requires controlled seed mailboxes and authorized test sending; it is not part of standard verification
+- Warmup tools are intentionally separate from email verification and are not simulated here

@@ -1,5 +1,6 @@
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
-from typing import Dict, Any, List, Optional
 
 
 class SummaryService:
@@ -29,6 +30,11 @@ class SummaryService:
         summary["risky_count"] = int(status_counts.get("Risky", 0))
         summary["invalid_count"] = int(status_counts.get("Invalid", 0))
         summary["unknown_count"] = int(status_counts.get("Unknown", 0))
+        summary["temporary_failure_count"] = int(status_counts.get("Temporary Failure", 0))
+        summary["abuse_count"] = int(status_counts.get("Abuse", 0))
+        summary["greylisted_count"] = int(status_counts.get("Greylisted", 0))
+        summary["smtp_accepted_count"] = int((df["smtp_status"] == "accepted").sum()) if "smtp_status" in df.columns else 0
+        summary["smtp_rejected_count"] = int((df["smtp_status"] == "rejected").sum()) if "smtp_status" in df.columns else 0
 
         if "disposable" in df.columns:
             summary["disposable_count"] = int(df["disposable"].sum())
@@ -45,6 +51,9 @@ class SummaryService:
             summary["role_based_count"] = int(df["role_based"].sum())
         else:
             summary["role_based_count"] = 0
+
+        if "abuse_address" in df.columns:
+            summary["abuse_count"] = max(summary["abuse_count"], int(df["abuse_address"].sum()))
 
         if "is_duplicate" in df.columns:
             summary["duplicate_count"] = int(df["is_duplicate"].sum())
@@ -69,8 +78,10 @@ class SummaryService:
 
         if "verification_score" in df.columns:
             summary["average_verification_score"] = round(float(df["verification_score"].mean()), 1)
+            summary["average_score"] = summary["average_verification_score"]
         else:
             summary["average_verification_score"] = 0.0
+            summary["average_score"] = 0.0
 
         if "confidence_level" in df.columns:
             conf_map = {"High": 3, "Medium": 2, "Low": 1, "Very Low": 0}

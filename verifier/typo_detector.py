@@ -1,7 +1,8 @@
 import json
-from pathlib import Path
-from typing import Optional, Tuple, List
 from difflib import SequenceMatcher
+from pathlib import Path
+from typing import Optional
+
 from .models import TypoResult
 
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"

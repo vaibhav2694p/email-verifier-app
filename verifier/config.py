@@ -1,6 +1,5 @@
 import os
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass
@@ -48,6 +47,20 @@ class VerifierConfig:
     notification_to_email: str = ""
     mailpit_web_url: str = "http://localhost:8025"
 
+    # Domain health / reputation
+    enable_blacklist_check: bool = False
+    enable_domain_monitoring: bool = False
+    enable_ai_scoring: bool = False
+    blacklist_dnsbl_providers: str = "zen.spamhaus.org,bl.spamcop.net"
+    dkim_selectors: str = "default,selector1,selector2,google,k1"
+
+    # API / persistence / privacy
+    api_enabled: bool = True
+    api_key: str = ""
+    webhook_secret: str = ""
+    database_url: str = "sqlite:///email_verifier.db"
+    data_retention_days: int = 30
+
     @classmethod
     def from_env(cls) -> "VerifierConfig":
         return cls(
@@ -83,4 +96,16 @@ class VerifierConfig:
             notification_from_email=os.getenv("NOTIFICATION_FROM_EMAIL", ""),
             notification_to_email=os.getenv("NOTIFICATION_TO_EMAIL", ""),
             mailpit_web_url=os.getenv("MAILPIT_WEB_URL", "http://localhost:8025"),
+            enable_blacklist_check=os.getenv("ENABLE_BLACKLIST_CHECK", "false").lower() == "true",
+            enable_domain_monitoring=os.getenv("ENABLE_DOMAIN_MONITORING", "false").lower() == "true",
+            enable_ai_scoring=os.getenv("ENABLE_AI_SCORING", "false").lower() == "true",
+            blacklist_dnsbl_providers=os.getenv("BLACKLIST_DNSBL_PROVIDERS", "zen.spamhaus.org,bl.spamcop.net"),
+            dkim_selectors=os.getenv("DKIM_SELECTORS", "default,selector1,selector2,google,k1"),
+            api_enabled=os.getenv("API_ENABLED", "true").lower() == "true",
+            api_key=os.getenv("API_KEY", ""),
+            webhook_secret=os.getenv("WEBHOOK_SECRET", ""),
+            database_url=os.getenv("DATABASE_URL", "sqlite:///email_verifier.db"),
+            data_retention_days=int(os.getenv("DATA_RETENTION_DAYS", "30")),
+            max_upload_size_mb=int(os.getenv("MAX_UPLOAD_MB", "50")),
+            max_rows=int(os.getenv("MAX_ROWS", "100000")),
         )

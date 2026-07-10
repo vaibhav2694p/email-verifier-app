@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
-from typing import Optional, Tuple, Dict
-from .models import ProviderType
+from typing import Dict, Optional, Tuple
 
 BUILTIN_ROLE_PREFIXES = {
     "info", "sales", "support", "admin", "contact", "billing",

@@ -1,27 +1,23 @@
-import streamlit as st
-import pandas as pd
 import base64
-import os
-from pathlib import Path
 import traceback
-from datetime import datetime
-from typing import Optional, Dict, Any, List
+from pathlib import Path
+from typing import Dict, List
 
-from verifier.config import VerifierConfig
-from verifier.pipeline import VerificationPipeline
-from verifier.models import VerificationStatus, VerificationResult, PipelineStage
-from verifier.smtp_validator import check_port_25_available
+import pandas as pd
+import streamlit as st
+
+from enrichment.company_lookup import lookup_company
+from enrichment.models import EnrichmentResult
+from enrichment.person_lookup import lookup_person
+from enrichment.summary import generate_summary as generate_enrichment_summary
 from services.bulk_processor import BulkProcessor
 from services.export_service import ExportService
+from services.input_service import parse_upload
 from services.summary_service import SummaryService
-from enrichment.models import PersonProfile, CompanyProfile, EnrichmentResult
-from enrichment.company_lookup import lookup_company
-from enrichment.person_lookup import lookup_person
-from enrichment.profile_matcher import match_profiles, build_company_summary
-from enrichment.summary import generate_summary as generate_enrichment_summary
-from enrichment.cache import EnrichmentCache
-
-
+from verifier.config import VerifierConfig
+from verifier.models import PipelineStage, VerificationResult
+from verifier.pipeline import VerificationPipeline
+from verifier.smtp_validator import check_port_25_available
 
 st.set_page_config(
     page_title="Email Verifier",
@@ -1023,17 +1019,17 @@ def render_filters():
 # ── Bulk Verification ──────────────────────────────────────────────────
 def render_bulk_verification():
     uploaded_file = st.file_uploader(
-        "Upload CSV or XLSX",
-        type=["csv", "xlsx"],
+        "Upload CSV, XLSX, XLS, or TXT",
+        type=["csv", "xlsx", "xls", "txt"],
         label_visibility="collapsed",
     )
 
     if uploaded_file is not None:
         try:
-            if uploaded_file.name.endswith(".csv"):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_excel(uploaded_file)
+            parsed = parse_upload(uploaded_file, uploaded_file.name, max_rows=VerifierConfig.from_env().max_rows)
+            df = parsed.dataframe
+            for warning in parsed.warnings or []:
+                st.warning(warning)
         except Exception as e:
             st.error(f"Could not read file: {e}")
             return

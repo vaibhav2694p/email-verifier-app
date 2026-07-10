@@ -1,14 +1,13 @@
-import random
-import string
-import hashlib
-import time
 import logging
+import random
 import smtplib
 import socket
+import string
 from typing import Optional, Tuple
-from .models import CatchAllResult, CatchAllStatus, SmtpResult, SmtpStatus
-from .config import VerifierConfig
+
 from .cache import TTLCache
+from .config import VerifierConfig
+from .models import CatchAllResult, CatchAllStatus
 
 logger = logging.getLogger(__name__)
 

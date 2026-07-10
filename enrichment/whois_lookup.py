@@ -1,7 +1,7 @@
 import logging
-import re
 import socket
-from typing import Optional, Dict
+from typing import Dict, Optional
+
 from .cache import EnrichmentCache
 
 logger = logging.getLogger(__name__)
@@ -16,12 +16,12 @@ def lookup_whois(domain: str) -> Optional[Dict]:
         return cached
 
     result = {"domain": domain}
-    
+
     try:
         # Try python-whois if available
         import whois
         w = whois.whois(domain)
-        
+
         if w.creation_date:
             if isinstance(w.creation_date, list):
                 creation = w.creation_date[0]
@@ -30,20 +30,20 @@ def lookup_whois(domain: str) -> Optional[Dict]:
             if hasattr(creation, 'strftime'):
                 result["creation_date"] = creation.strftime("%Y-%m-%d")
                 result["age"] = _calculate_age(creation)
-        
+
         if w.registrar:
             result["registrar"] = str(w.registrar)
-        
+
         if w.org:
             result["organization"] = str(w.org) if not isinstance(w.org, list) else str(w.org[0])
-        
+
         if w.country:
             result["country"] = str(w.country) if not isinstance(w.country, list) else str(w.country[0])
-        
+
         if w.name_servers:
             ns = w.name_servers if isinstance(w.name_servers, list) else [w.name_servers]
             result["name_servers"] = ns[:5]
-        
+
     except ImportError:
         # python-whois not available, try basic DNS
         logger.debug("python-whois not installed, using DNS fallback")
@@ -51,7 +51,7 @@ def lookup_whois(domain: str) -> Optional[Dict]:
     except Exception as e:
         logger.debug("WHOIS lookup failed for %s: %s", domain, e)
         _dns_fallback(domain, result)
-    
+
     _whois_cache.set(cache_key, result)
     return result
 
