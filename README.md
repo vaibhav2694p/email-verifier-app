@@ -1,80 +1,111 @@
 # Email Verifier
 
-A Streamlit application for verifying email lists with domain validation, MX checks, and scoring.
+A production-ready bulk email verification app built with Streamlit. Uses a 16-stage verification pipeline with SMTP probing, catch-all detection, typo suggestions, IDN support, and comprehensive scoring.
 
 ## Features
-- Single-page interface with professional UI
-- Safebooks Global branding
-- CSV/XLSX file upload
-- Email validation with syntax normalization
-- Domain extraction and cleaning
-- MX record lookup with DNS timeout handling
-- Website reachability checking
-- Email provider detection (Google, Microsoft, etc.)
-- Disposable email detection
-- Public email domain detection
-- Role-based email identification
-- Company domain matching verification
-- Accurate scoring system (0-100)
-- Results table with status badges
-- Excel and CSV download options
+
+- **Dual-tab UI** - Bulk verification (CSV/XLSX upload) and single-email lookup
+- **16-stage pipeline** - Syntax → Typo → DNS/MX → Provider → SMTP → Catch-All → Disposable → Role → Scoring
+- **SMTP mailbox probing** - EHLO/MAIL FROM/RCPT TO conversation with provider-specific overrides (Gmail, Outlook, Yahoo)
+- **Catch-all detection** - Probes random addresses to detect catch-all mail servers
+- **Domain typo detection** - Levenshtein + reverse-lookup correction suggestions
+- **IDN support** - Internationalized domain names with punycode conversion
+- **500+ disposable domains** - Built-in blocklist with custom file support
+- **Role-based detection** - Identifies admin@, info@, support@, etc.
+- **TTL cache** - Thread-safe caching to avoid repeated DNS/SMTP probes
+- **Dashboard** - Real-time metrics, filters, and score breakdown
+- **Export** - CSV, multi-sheet Excel with domain summaries and statistics
+
+## Architecture
+
+```
+app.py                          # Streamlit UI (dual-tab)
+verifier/
+  pipeline.py                   # 16-stage orchestrator
+  models.py                     # VerificationResult, PipelineStage, enums
+  config.py                     # VerifierConfig (env vars + defaults)
+  cache.py                      # Thread-safe TTLCache
+  normalizer.py                 # Email/domain normalization, IDN/punycode
+  syntax_validator.py           # 15-rule RFC-compliant syntax check
+  typo_detector.py              # Levenshtein + reverse-lookup
+  dns_validator.py              # MX lookup with retry + TTL cache
+  mx_provider.py                # Provider classification from MX records
+  smtp_validator.py             # SMTP EHLO/MAIL FROM/RCPT TO probing
+  catch_all.py                  # Random-address catch-all detection
+  disposable.py                 # Disposable domain detection
+  role_detector.py              # Role-based address detection
+  scoring.py                    # Weighted confidence scoring
+services/
+  bulk_processor.py             # ThreadPoolExecutor + duplicate detection
+  export_service.py             # CSV/XLSX export with multi-sheet Excel
+  summary_service.py            # Dashboard stats and filter application
+data/
+  disposable_domains.txt        # 500+ disposable domains
+  public_domains.json           # Free domains + workspace MX patterns
+  role_prefixes.json            # Role prefixes with risk adjustments
+  domain_typos.json             # Common domain typos
+```
 
 ## Installation
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Place the Safebooks Global logo at `assets/safebooks_logo.png`
+
+```bash
+git clone https://github.com/vaibhav2694p/email-verifier-Streamlit-app.git
+cd email-verifier-Streamlit-app
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+pip install -r requirements.txt
+```
+
+Place your logo at `assets/safebooks_logo.png`.
 
 ## Usage
-Run the application:
+
 ```bash
 streamlit run app.py
 ```
-1. Upload your CSV or XLSX file containing email addresses
-2. Select the email column
-3. (Optional) Select a company domain column for matching verification
-4. Click "Verify Emails"
-5. View results and download as Excel or CSV
 
-## Output Columns
-- **Email**: Original email address
-- **Normalized Email**: Validated and normalized email
-- **Domain**: Extracted domain from email
-- **Domain Active**: Whether website is reachable (Yes/No)
-- **Website Status**: Detailed website check result
-- **MX Status**: MX records found or error status
-- **Email Provider**: Detected email service provider
-- **Verification Status**: Final status (Verified, Risky, Invalid, etc.)
-- **Verification Score**: Score from 0-100 based on verification checks
-- **Notes**: Additional information about the verification
+### Bulk Verification
+1. Upload CSV/XLSX
+2. Select email column and optional company domain column
+3. Click "Verify Emails"
+4. View dashboard, filter results, download exports
 
-## Scoring Logic
-The application uses a weighted scoring system with caps:
+### Single Email
+1. Enter email address
+2. Optionally enter company domain
+3. Click "Verify Email"
+4. View stage-by-stage analysis with score breakdown
 
-| Check | Points |
-|-------|--------|
-| Valid email syntax | +10 |
-| MX records found | +20 |
-| Website active | +15 |
-| Known email provider | +10 |
-| Company domain match | +30 |
-| Not public/free email | +10 |
-| Not disposable | +10 |
+## Scoring
+
+| Factor | Points |
+|--------|--------|
+| Valid syntax | +15 |
+| MX records resolved | +20 |
+| SMTP accepted | +15 |
+| Known provider | +5 |
+| Company domain match | +25 |
+| Not public/free | +10 |
+| Not disposable | +5 |
+| Not role-based | +5 |
+| Catch-all detected | -10 |
+| Typo detected | -15 |
 | Role-based email | -10 |
+| Disposable domain | -50 |
+| No MX records | -40 |
 
-Score caps (applied in order):
-- Invalid syntax: 0
-- Disposable email: max 10
-- No MX found: max 20
-- Public/free email: max 45
-- Company domain mismatch: max 50
+Status mapping: Valid (≥75), Likely Valid (≥50), Risky (≥30), Invalid (<30)
 
-Final score is clamped between 0-100.
+## Docker
 
-## Important Notes
-- MX records indicate server configuration, not mailbox existence
-- Public email domains (Gmail, Yahoo, etc.) are capped at 45 points
-- True email ownership verification requires sending a confirmation email
-- The application does not perform SMTP mailbox probing for security and privacy reasons
+```bash
+docker compose up --build
+```
+
+## Testing
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/ -v
+```
+
+131 tests covering syntax, normalization, DNS, SMTP, catch-all, disposable, role detection, scoring, pipeline, bulk processing, export, and caching.

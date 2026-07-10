@@ -1,5 +1,17 @@
 __pycache__/
 *.pyc
+*.pyo
 *.log
 .env
 work/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+*.xlsx
+*.csv
+.DS_Store
+Thumbs.db
