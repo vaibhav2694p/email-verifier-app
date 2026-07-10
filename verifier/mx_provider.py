@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from .models import ProviderType
 
 _PROVIDER_DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "public_domains.json"
@@ -18,7 +19,7 @@ def _load_provider_data():
             data = json.load(f)
         _free_domains = data.get("free_domains", [])
         _workspace_providers = data.get("workspace_providers", {})
-    except (FileNotFoundError, json.JSONDecodeError) as e:
+    except (FileNotFoundError, json.JSONDecodeError):
         _free_domains = []
         _workspace_providers = {}
 
@@ -118,11 +119,7 @@ def is_workspace_domain(domain: str, mx_records: List[Dict[str, Any]]) -> Option
 
     for provider_key, provider_config in _workspace_providers.items():
         workspace_mx = provider_config.get("workspace_mx", [])
-        match = all(
-            any(wc.replace("*.", "") in all_hosts for wc in workspace_mx)
-            if isinstance(workspace_mx, list) and len(workspace_mx) > 0
-            else False
-        )
+        match = any(wc.replace("*.", "") in all_hosts for wc in workspace_mx) if isinstance(workspace_mx, list) else False
         if match:
             mapping = {
                 "google": ProviderType.GOOGLE_WORKSPACE,

@@ -1,6 +1,7 @@
-import pytest
 import pandas as pd
+
 from services.export_service import ExportService
+
 
 class TestExportService:
     def _make_df(self):
@@ -15,19 +16,19 @@ class TestExportService:
             "website_status": ["Active", "Not Active", "Active"],
             "notes": ["OK", "No MX", "Risky"],
         })
-    
+
     def test_csv_export(self):
         df = self._make_df()
         csv = ExportService.to_csv(df)
         assert isinstance(csv, bytes)
         assert len(csv) > 0
-    
+
     def test_excel_export(self):
         df = self._make_df()
         xlsx = ExportService.to_excel(df)
         assert isinstance(xlsx, bytes)
         assert len(xlsx) > 0
-    
+
     def test_domain_summary(self):
         df = self._make_df()
         summary = ExportService.to_domain_summary(df)
@@ -35,7 +36,6 @@ class TestExportService:
 
 class TestSummaryService:
     def _make_df(self):
-        from services.summary_service import SummaryService
         return pd.DataFrame({
             "original_email": ["a@test.com", "b@test.com"],
             "domain": ["test.com", "test.com"],
@@ -50,7 +50,7 @@ class TestSummaryService:
             "mx_provider": ["Unknown", "Unknown"],
             "free_public_email": [False, False],
         })
-    
+
     def test_compute_summary(self):
         from services.summary_service import SummaryService
         df = self._make_df()
@@ -58,7 +58,7 @@ class TestSummaryService:
         assert summary["total_uploaded"] == 2
         assert summary["valid_count"] == 1
         assert summary["invalid_count"] == 1
-    
+
     def test_apply_filters(self):
         from services.summary_service import SummaryService
         df = self._make_df()

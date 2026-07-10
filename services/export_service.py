@@ -1,7 +1,8 @@
-import pandas as pd
 from io import BytesIO
-from typing import Optional, List, Dict
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from typing import List
+
+import pandas as pd
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 
@@ -14,7 +15,11 @@ class ExportService:
     def to_excel(df: pd.DataFrame) -> bytes:
         buf = BytesIO()
 
-        status_order = ["Valid", "Likely Valid", "Risky", "Invalid", "Unknown"]
+        status_order = [
+            "Valid", "Likely Valid", "Invalid", "Catch-All", "Disposable",
+            "Role Account", "Abuse", "Unknown", "Temporary Failure", "Do Not Mail",
+            "SMTP Blocked", "Greylisted", "Duplicate", "Risky",
+        ]
 
         sheets = {
             "All Results": df.copy(),
@@ -23,11 +28,25 @@ class ExportService:
             for status in status_order:
                 subset = df[df["verification_status"] == status].copy()
                 if not subset.empty:
-                    sheets[status] = subset
+                    sheets[_sheet_name(status)] = subset
+
+            if "do_not_mail" in df.columns:
+                subset = df[df["do_not_mail"] == True].copy()
+                if not subset.empty:
+                    sheets["Do Not Mail"] = subset
+
+            if "is_duplicate" in df.columns:
+                subset = df[df["is_duplicate"] == True].copy()
+                if not subset.empty:
+                    sheets["Duplicate List"] = subset
 
         domain_summary = ExportService.to_domain_summary(df)
         if not domain_summary.empty:
             sheets["Domain Summary"] = domain_summary
+
+        provider_summary = ExportService.to_provider_summary(df)
+        if not provider_summary.empty:
+            sheets["Provider Summary"] = provider_summary
 
         run_summary = pd.DataFrame([{
             "Metric": "Total Emails",
@@ -62,6 +81,22 @@ class ExportService:
         else:
             filtered = df.copy()
         return filtered.to_csv(index=False).encode("utf-8")
+
+    @staticmethod
+    def to_provider_summary(df: pd.DataFrame) -> pd.DataFrame:
+        provider_col = "mail_hosting_provider" if "mail_hosting_provider" in df.columns else "mx_provider"
+        if provider_col not in df.columns:
+            return pd.DataFrame()
+        summary = df.groupby(provider_col).agg(total=(provider_col, "count")).reset_index()
+        if "verification_status" in df.columns:
+            status_counts = df.groupby([provider_col, "verification_status"]).size().unstack(fill_value=0)
+            for col in status_counts.columns:
+                summary[col] = summary[provider_col].map(status_counts[col]).fillna(0).astype(int)
+        if "verification_score" in df.columns:
+            scores = df.groupby(provider_col)["verification_score"].mean().round(1).reset_index()
+            scores.columns = [provider_col, "avg_score"]
+            summary = summary.merge(scores, on=provider_col, how="left")
+        return summary.sort_values("total", ascending=False).reset_index(drop=True)
 
     @staticmethod
     def to_domain_summary(df: pd.DataFrame) -> pd.DataFrame:
@@ -141,6 +176,15 @@ class ExportService:
             "Risky": "FEF3C7",
             "Invalid": "FEE2E2",
             "Unknown": "F1F5F9",
+            "Catch-All": "FEF3C7",
+            "Disposable": "FEE2E2",
+            "Role Account": "FEF3C7",
+            "Abuse": "FEE2E2",
+            "Temporary Failure": "E0F2FE",
+            "Do Not Mail": "FECACA",
+            "SMTP Blocked": "E5E7EB",
+            "Greylisted": "E0F2FE",
+            "Duplicate": "E5E7EB",
         }
 
         if "verification_status" not in df.columns:
@@ -162,3 +206,13 @@ class ExportService:
             if color:
                 fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
                 cell.fill = fill
+
+
+def _sheet_name(status: str) -> str:
+    mapping = {
+        "Catch-All": "Catch-All",
+        "Role Account": "Role Accounts",
+        "Temporary Failure": "Temporary Failures",
+        "Do Not Mail": "Do Not Mail",
+    }
+    return mapping.get(status, status)

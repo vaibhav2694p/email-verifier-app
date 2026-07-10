@@ -1,13 +1,15 @@
-import dns.resolver
-import dns.exception
-import dns.name
+import logging
 import socket
 import time
-import logging
-from typing import List, Dict, Any, Optional, Tuple
-from .models import DnsResult, DnsStatus
+from typing import Any, Dict, List, Optional, Tuple
+
+import dns.exception
+import dns.name
+import dns.resolver
+
 from .cache import TTLCache
 from .config import VerifierConfig
+from .models import DnsResult, DnsStatus
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +43,13 @@ def validate_dns(domain: str, config: Optional[VerifierConfig] = None) -> DnsRes
 
     start = time.time()
     result = DnsResult()
+    resolver = _get_resolver(config)
+    result.resolver_used = ",".join(resolver.nameservers)
 
     try:
+        result.a_records = lookup_record_values(domain, "A", config)
+        result.aaaa_records = lookup_record_values(domain, "AAAA", config)
+        result.cname_records = lookup_record_values(domain, "CNAME", config)
         mx_records = lookup_mx_records(domain, config)
         result.mx_records = mx_records
         result.has_mx = len(mx_records) > 0
@@ -58,9 +65,8 @@ def validate_dns(domain: str, config: Optional[VerifierConfig] = None) -> DnsRes
             result.primary_mx = ""
             result.mx_provider = "Null MX (No Email)"
         else:
-            a_record = lookup_a_record(domain, config)
-            if a_record:
-                result.primary_mx = a_record
+            if result.a_records or result.aaaa_records:
+                result.primary_mx = (result.a_records or result.aaaa_records)[0]
                 result.status = DnsStatus.RESOLVED
                 result.mx_provider = "A/AAAA Fallback"
             else:
@@ -114,7 +120,7 @@ def lookup_mx_records(domain: str, config: Optional[VerifierConfig] = None) -> L
                 time.sleep(wait)
             else:
                 raise
-        except Exception as e:
+        except Exception:
             raise
 
     raise last_exc
@@ -162,6 +168,19 @@ def lookup_a_record(domain: str, config: Optional[VerifierConfig] = None) -> Opt
         return str(answers[0])
     except Exception:
         return None
+
+
+def lookup_record_values(domain: str, record_type: str, config: Optional[VerifierConfig] = None) -> List[str]:
+    resolver = _get_resolver(config)
+    try:
+        answers = resolver.resolve(domain, record_type)
+        values = []
+        for answer in answers:
+            value = str(answer).rstrip(".")
+            values.append(value)
+        return values
+    except Exception:
+        return []
 
 
 def check_domain_reachable(domain: str) -> Tuple[bool, str, str]:

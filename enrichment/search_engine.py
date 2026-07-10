@@ -1,7 +1,7 @@
 import logging
 import re
-from typing import List, Dict, Optional
-from urllib.parse import quote_plus
+from typing import Dict, List, Optional
+
 import requests
 
 logger = logging.getLogger(__name__)

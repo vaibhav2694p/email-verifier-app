@@ -1,6 +1,6 @@
-from .models import VerificationResult, PipelineStage, SmtpResult, CatchAllResult
-from .pipeline import VerificationPipeline
 from .config import VerifierConfig
+from .models import CatchAllResult, PipelineStage, SmtpResult, VerificationResult
+from .pipeline import VerificationPipeline
 
 __all__ = [
     "VerificationResult",
